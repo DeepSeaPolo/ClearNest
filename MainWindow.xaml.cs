@@ -14,6 +14,7 @@ namespace ClearNest;
 public sealed partial class MainWindow : Window
 {
  private readonly DispatcherTimer timer=new();
+ private readonly MemoryTimeline memoryTimeline=new();
  private readonly TrayService tray;
  private MiniWindow? mini; private bool exiting,busy,miniMode;
  private Preferences preferences=new();
@@ -42,7 +43,7 @@ public sealed partial class MainWindow : Window
 
  public MainWindow()
  {
-  InitializeComponent();Title="ClearNest · 清巢";AppWindow.Resize(new SizeInt32(1120,880));
+  InitializeComponent();MemoryPanel.Bind(memoryTimeline);Title="ClearNest · 清巢";AppWindow.Resize(new SizeInt32(1120,880));
   ExtendsContentIntoTitleBar=true;SetTitleBar(TitleRegion);AppIconService.ApplyTo(this);TitleAppIcon.Source=AppIconService.CreateImage();
   Root.ActualThemeChanged+=(_,_)=>UpdateCaption();
   try{preferences=Preferences.Load();}catch(Exception){Message("无法读取设置，已使用默认外观。");}
@@ -68,7 +69,7 @@ public sealed partial class MainWindow : Window
  }
  private void Refresh(bool checkAutomatic=true)
  {
-  try{var m=MemoryService.Read();latestLoad=100d*(m.Total-m.Available)/m.Total;MemoryUsedValue.Text=MemoryService.Size(m.Total-m.Available);MemoryTrend.Sample(latestLoad);UsedLegend.Text=$"使用中 {MemoryService.Size(m.Total-m.Available)}";MemoryPercent.Text=$"{m.Load}% 占用";AvailableText.Text="可用 "+MemoryService.Size(m.Available);MemoryText.Text=$"总内存 {MemoryService.Size(m.Total)} · 每 {preferences.RefreshSeconds} 秒更新";MemoryBar.Value=m.Load;mini?.Update(m.Load,MemoryService.Size(m.Available));if(checkAutomatic)_=TryAutomaticAsync();}
+  try{var m=MemoryService.Read();memoryTimeline.Record(m.Total,m.Available,DateTimeOffset.UtcNow);latestLoad=memoryTimeline.Current!.Value.Percent;if(checkAutomatic)_=TryAutomaticAsync();}
   catch(Exception e){Message(e.Message,true);}
  }
  private void Message(string text,bool error=false){mini?.Report(text,error);Status.Message=text;Status.Severity=error?InfoBarSeverity.Error:InfoBarSeverity.Informational;}
@@ -226,7 +227,7 @@ public sealed partial class MainWindow : Window
   if(busy&&dialogOpen){Message("请先关闭当前确认对话框。");return;}
   if(mini==null)
   {
-   mini=new MiniWindow(ShowMain,()=>Memory_Click(this,new RoutedEventArgs()));
+   mini=new MiniWindow(ShowMain,()=>Memory_Click(this,new RoutedEventArgs()),()=>Diagnostics_Click(this,new RoutedEventArgs()),memoryTimeline);
    mini.ApplyAppearance(PreferredTheme,preferences.Mica,preferences.MiniOnTop);
    mini.AppWindow.Closing+=(_,args)=>
    {
