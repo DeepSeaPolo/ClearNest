@@ -2,7 +2,15 @@
 
 已通过 Windows 编译、单 EXE 独立启动、清理保护、启动项恢复、主题和后台采样期间窗口切换测试。完整 Windows 11 人工验收仍待完成；待机缓存回收使用非公开系统接口。
 
-[下载 v0.5.0 单文件 EXE](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.5.0/ClearNest-v0.5.0-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.5.0)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
+[下载 v0.5.1 单文件 EXE](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.5.1/ClearNest-v0.5.1-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.5.1)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
+
+## v0.5.1 滚动与窄窗口布局
+
+- 仪表盘、网络、设置页为覆盖式滚动条保留独立边距；列表行、多行报告和诊断对话框也预留空间，展开滚动条时不遮住内容。
+- 工具按钮按可用宽度自动换行；主窗口按当前 DPI 设置可用的最小尺寸，避免继续缩窄后裁掉操作。
+- Mini 按显示缩放计算物理尺寸，并受工作区边界约束；空间不足时允许纵向滚动。
+- 确认框和诊断内容高度受所属窗口约束，长说明可滚动，操作按钮保留在可见区域。
+- Windows 自动检查覆盖 860/640/500 像素宽窗口、页面底部可达性、列表与文字边界和明暗主题截图。不同显示缩放的实际设备表现仍需人工确认。
 
 ## v0.5.0 单实例、网络工具与启动修复
 
