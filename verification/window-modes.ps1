@@ -97,6 +97,22 @@ try {
   if ([WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini remains visible after returning to main'}
   Write-Output "PASS: Main mode hides Mini window (cycle $cycle)"
  }
+ # Verify a worker scan does not lock window-mode navigation.
+ $scanCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ScanProcessHome')
+ $scanButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$scanCondition)
+ $latency=[System.Diagnostics.Stopwatch]::StartNew()
+ $scanButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ $switchCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'SwitchToMini')
+ $switchButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$switchCondition)
+ $switchButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ $busyMini=Find-Window $app.Id 'ClearNest Mini'
+ if ([WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window stayed visible during worker scan switch'}
+ if ($latency.Elapsed.TotalSeconds -gt 5) {throw 'Worker scan blocked native window switching beyond test budget'}
+ Invoke-Button $busyMini 'ReturnToMain'
+ $cancelCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'CancelOperation')
+ $cancelButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$cancelCondition)
+ if ($null -ne $cancelButton -and !$cancelButton.Current.IsOffscreen) {$cancelButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()}
+ Write-Output "PASS: worker scan permits Mini switching ($($latency.Elapsed.TotalMilliseconds) ms including UI automation)"
  Write-Output 'Native window mode checks passed'
 } finally {
  $app.Refresh()

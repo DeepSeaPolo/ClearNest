@@ -94,3 +94,33 @@ Check(policy.GetDue(autoPreferences,start.AddMinutes(31),79)==null,"threshold po
 Check(policy.GetDue(autoPreferences,start.AddMinutes(32),86)!=null,"threshold policy can trigger after recovery and a new rise");
 autoPreferences.AutoThresholdEnabled=false;
 Check(policy.GetDue(autoPreferences,start.AddHours(2),99)==null,"disabled automatic policies never trigger");
+
+var cancelled=new System.Threading.CancellationTokenSource();cancelled.Cancel();
+Check(DiskService.Scan(false,cancelled.Token).Cancelled,"directory scan honors pre-cancellation");
+try{await ProcessService.Scan(cancelled.Token);throw new Exception("process cancellation ignored");}catch(OperationCanceledException){Console.WriteLine("PASS: process sampling is cancellable");}
+var processes=await ProcessService.Scan();Check(processes.Count>0&&processes.All(x=>x.Cpu>=0&&x.Cpu<=100&&x.Bytes>=0&&x.PrivateBytes>=0),"worker process scan returns bounded CPU and memory measurements");
+var diagnostics=MemoryDiagnostics.Read();Check(diagnostics.CommitLimit>0&&diagnostics.PhysicalAvailable<=diagnostics.PhysicalTotal,"memory diagnostics expose real commit and physical capacity");
+var startupName="ClearNest-Startup-Test-"+Guid.NewGuid().ToString("N");
+var startupCommand="\"%LOCALAPPDATA%\\ClearNestFixture-"+Guid.NewGuid().ToString("N")+"\\app.exe\" --fixture";
+var startupBackups=new List<string>();
+try
+{
+ using(var key=Registry.CurrentUser.CreateSubKey(keyPath,true))key.SetValue(startupName,startupCommand,RegistryValueKind.ExpandString);
+ var row=StartupService.Scan().Single(x=>x.Name==startupName&&!x.Disabled);
+ Check(row.Managed&&row.Command==startupCommand,"startup enumeration preserves unexpanded command data");
+ startupBackups.Add(StartupService.SetDisabled(row,true));
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath))Check(key?.GetValue(startupName)==null,"startup disable removes only selected current-user Run value");
+ row=StartupService.Scan().Single(x=>x.Name==startupName&&x.Disabled);
+ Check(row.Command==startupCommand&&startupBackups.All(File.Exists),"startup disable retains recoverable value and durable backup");
+ using(var key=Registry.CurrentUser.CreateSubKey(keyPath,true))key.SetValue(startupName,"existing fixture",RegistryValueKind.String);
+ try{StartupService.SetDisabled(row,false);throw new Exception("startup overwrite accepted");}catch(IOException){Console.WriteLine("PASS: startup restore rejects destination conflicts");}
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath,true))key!.DeleteValue(startupName);
+ startupBackups.Add(StartupService.SetDisabled(row,false));
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath))Check((string?)key?.GetValue(startupName,null,RegistryValueOptions.DoNotExpandEnvironmentNames)==startupCommand&&key.GetValueKind(startupName)==RegistryValueKind.ExpandString,"startup restore preserves exact command and registry kind");
+}
+finally
+{
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath,true))key?.DeleteValue(startupName,false);
+ using(var key=Registry.CurrentUser.OpenSubKey(@"Software\ClearNest\DisabledStartup",true))key?.DeleteValue(startupName,false);
+ foreach(var backup in startupBackups)File.Delete(backup);
+}

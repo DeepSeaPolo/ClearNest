@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using System.Threading;
+using System.Collections.Generic;
 using ClearNest.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -21,7 +23,19 @@ public sealed partial class MainWindow : Window
  {
   get{using var identity=System.Security.Principal.WindowsIdentity.GetCurrent();return new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);}
  }
- private bool initializing=true;
+ private bool initializing=true,dialogOpen,exitAfterWork;
+ private CancellationTokenSource? operationCancellation;
+ private ContentDialog? activeDialog;
+ private int operationId,diskPage;
+ private List<DiskRow> diskRows=new();
+ private List<ProcessRow> processRows=new();
+ private CancellationToken CurrentToken=>operationCancellation?.Token??CancellationToken.None;
+ private IProgress<OperationProgress> ProgressForOperation()
+ {
+  int id=operationId;
+  return new Progress<OperationProgress>(p=>{if(id==operationId&&busy&&!CurrentToken.IsCancellationRequested)OperationText.Text=$"{p.Phase} · 已检查 {p.Seen} · 候选 {p.Candidates}";});
+ }
+
  public MainWindow()
  {
   InitializeComponent();Title="ClearNest · 清巢";AppWindow.Resize(new SizeInt32(1120,880));
@@ -36,9 +50,14 @@ public sealed partial class MainWindow : Window
   AutoInterval.IsOn=preferences.AutoIntervalEnabled;AutoThreshold.IsOn=preferences.AutoThresholdEnabled;
   AutoMinutes.Value=preferences.AutoIntervalMinutes;AutoPercent.Value=preferences.AutoThresholdPercent;
   autoPolicy.Configure(preferences,DateTimeOffset.UtcNow);
-  Navigation.SelectedItem=Navigation.MenuItems[0];initializing=false;ApplyAppearance();UpdateAutoState();
+  ProcessSort.SelectedIndex=0;Navigation.SelectedItem=Navigation.MenuItems[0];initializing=false;ApplyAppearance();UpdateAutoState();
   tray=new TrayService(ShowMain,ShowMini,Exit);
-  AppWindow.Closing+=(_,args)=>{if(!exiting&&(busy||Resident.IsOn)){args.Cancel=true;if(!busy)AppWindow.Hide();else Message("正在操作，请等待完成后关闭。");}};
+  AppWindow.Closing+=(_,args)=>
+  {
+   if(exiting)return;
+   if(Resident.IsOn){args.Cancel=true;AppWindow.Hide();return;}
+   if(busy){args.Cancel=true;exitAfterWork=true;operationCancellation?.Cancel();activeDialog?.Hide();Message("正在取消当前任务，完成后退出。");}
+  };
   Closed+=(_,_)=>{exiting=true;timer.Stop();tray.Dispose();mini?.Close();Microsoft.UI.Xaml.Application.Current.Exit();};
   timer.Interval=TimeSpan.FromSeconds(preferences.RefreshSeconds);timer.Tick+=(_,_)=>Refresh();timer.Start();Refresh(false);
  }
@@ -50,13 +69,25 @@ public sealed partial class MainWindow : Window
  private void Message(string text,bool error=false){mini?.Report(text,error);Status.Message=text;Status.Severity=error?InfoBarSeverity.Error:InfoBarSeverity.Informational;}
  private async Task Run(Func<Task> work)
  {
-  if(busy){Message("已有操作正在执行。");return;}busy=true;
-  try{await work();}catch(Exception e){Message(e.Message,true);}finally{busy=false;Refresh();}
+  if(busy){Message("已有任务正在执行，可以取消该任务或继续切换页面。");return;}
+  busy=true;operationId++;using var cancellation=new CancellationTokenSource();operationCancellation=cancellation;
+  OperationBar.Visibility=Visibility.Visible;OperationText.Text="准备执行…";CancelOperation.IsEnabled=true;
+  try{await work();}
+  catch(OperationCanceledException){Message("任务已取消。");}
+  catch(Exception e){Message(e.Message,true);}
+  finally
+  {
+   operationCancellation=null;busy=false;OperationBar.Visibility=Visibility.Collapsed;
+   Refresh(!exitAfterWork);if(exitAfterWork)Exit();
+  }
  }
+ private void CancelOperation_Click(object sender,RoutedEventArgs e)
+ {operationCancellation?.Cancel();CancelOperation.IsEnabled=false;OperationText.Text="正在取消，等待当前系统调用结束…";}
  private async Task<bool> Confirm(string title,string text)
  {
-  var owner=miniMode&&mini!=null?mini.Content:Content;var dialog=new ContentDialog {Title=title,Content=new TextBlock {Text=text,TextWrapping=TextWrapping.Wrap},PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=owner.XamlRoot};
-  return await dialog.ShowAsync()==ContentDialogResult.Primary;
+  var owner=miniMode&&mini!=null?mini.Content:Content;
+  var dialog=new ContentDialog {Title=title,Content=new TextBlock {Text=text,TextWrapping=TextWrapping.Wrap},PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=owner.XamlRoot};
+  dialogOpen=true;activeDialog=dialog;try{return await dialog.ShowAsync()==ContentDialogResult.Primary;}finally{dialogOpen=false;activeDialog=null;}
  }
  private void Navigation_SelectionChanged(NavigationView sender,NavigationViewSelectionChangedEventArgs args)
  {
@@ -151,16 +182,16 @@ public sealed partial class MainWindow : Window
  }
  private async Task TryAutomaticAsync()
  {
-  if(busy||autoPaused||!IsAdministrator)return;
+  if(busy||autoPaused||exitAfterWork||!IsAdministrator)return;
   var reason=autoPolicy.GetDue(preferences,DateTimeOffset.UtcNow,latestLoad);if(reason==null)return;
   busy=true;
   try{Message("正在自动回收待机缓存…");await Task.Run(MemoryService.PurgeStandby);Message("已自动回收待机缓存 · "+reason);}
   catch(Exception ex){autoPaused=true;Message("自动回收已暂停："+ex.Message,true);}
-  finally{busy=false;UpdateAutoState();}
+  finally{busy=false;UpdateAutoState();if(exitAfterWork)Exit();}
  }
  private void ShowMain()
  {
-  if(busy&&miniMode)return;
+  if(busy&&dialogOpen&&miniMode)return;
   mini?.AppWindow.Hide();miniMode=false;
   AppWindow.Show();
   if(AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)presenter.Restore();
@@ -168,7 +199,7 @@ public sealed partial class MainWindow : Window
  }
  private void ShowMini()
  {
-  if(busy){Message("请等待当前操作完成后再切换窗口。");return;}
+  if(busy&&dialogOpen){Message("请先关闭当前确认对话框。");return;}
   if(mini==null)
   {
    mini=new MiniWindow(ShowMain,()=>Memory_Click(this,new RoutedEventArgs()));
@@ -177,7 +208,7 @@ public sealed partial class MainWindow : Window
    {
     if(exiting)return;
     args.Cancel=true;
-    if(busy)return;
+    if(busy&&dialogOpen)return;
     if(Resident.IsOn){mini?.AppWindow.Hide();miniMode=false;}
     else ShowMain();
    };
@@ -185,36 +216,104 @@ public sealed partial class MainWindow : Window
   miniMode=true;Refresh();AppWindow.Hide();mini.AppWindow.Show();mini.Activate();
  }
  private void Mini_Click(object sender,RoutedEventArgs e)=>ShowMini();
+ private async void Diagnostics_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  OperationText.Text="读取提交量与系统性能计数器…";var report=await Task.Run(MemoryDiagnostics.Read);CurrentToken.ThrowIfCancellationRequested();
+  var dialog=new ContentDialog {Title="内存与提交压力诊断",Content=new ScrollViewer {Content=new TextBlock {Text=report.Describe(),TextWrapping=TextWrapping.Wrap},MaxHeight=440},PrimaryButtonText="系统虚拟内存设置",CloseButtonText="关闭",XamlRoot=(miniMode&&mini!=null?mini.Content:Content).XamlRoot};
+  dialogOpen=true;activeDialog=dialog;try{if(await dialog.ShowAsync()==ContentDialogResult.Primary)OpenSystem("SystemPropertiesAdvanced.exe");}finally{dialogOpen=false;activeDialog=null;}
+ });
+ private void OpenSystem(string name)
+ {try{Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),name)){UseShellExecute=true});}catch(Exception ex){Message(ex.Message,true);}}
  private async void Memory_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
-  if(!await Confirm("回收待机缓存","仅清空已经离开工作集的未修改待机页，不触碰正在使用的进程工作集。待机缓存本就可用，清空后可能出现重新读取磁盘的开销。继续？"))return;
-  autoPolicy.RecordAttempt(preferences,DateTimeOffset.UtcNow,latestLoad);await Task.Run(MemoryService.PurgeStandby);Message("已提交待机缓存回收。可用内存可能没有明显变化，未将波动计为释放成果。");
+  if(!await Confirm("回收待机缓存","仅清理未修改的待机页，不触碰应用工作集或修改页。待机缓存本就属于可用内存，清空可能增加磁盘读取。继续？"))return;
+  OperationText.Text="读取回收前的待机缓存…";var before=await Task.Run(MemoryDiagnostics.Read);CurrentToken.ThrowIfCancellationRequested();
+  autoPolicy.RecordAttempt(preferences,DateTimeOffset.UtcNow,latestLoad);await Task.Run(MemoryService.PurgeStandby);
+  var after=await Task.Run(MemoryDiagnostics.Read);
+  string observed=before.Standby.HasValue&&after.Standby.HasValue?$"待机缓存观测：{MemoryService.Size(before.Standby.Value)} → {MemoryService.Size(after.Standby.Value)}。":"当前性能计数器不可用，未估算释放量。";
+  Message("回收请求已完成。"+observed+"这是前后观测，不保证占用率或性能改善。");
  });
- private async void Processes_Click(object sender,RoutedEventArgs e)=>await Run(async()=>{Message("正在采样进程…");var rows=await ProcessService.Scan();Processes.ItemsSource=rows;ProcessSummary.Text=rows.Count==0?"未读取到可访问进程。":string.Join(" · ",rows.Take(3).Select(x=>$"{x.Name} {x.Bytes/1048576d:F0} MB"));Message("进程列表已更新；没有自动结束任何进程。");});
- private void TaskManager_Click(object sender,RoutedEventArgs e){try{Process.Start(new ProcessStartInfo("taskmgr.exe"){UseShellExecute=true});}catch(Exception ex){Message(ex.Message,true);}}
- private async void DiskScan_Click(object sender,RoutedEventArgs e)=>await Run(async()=>{Message("正在扫描临时文件…");var result=await Task.Run(DiskService.Scan);DiskList.ItemsSource=result.Rows;DiskSummary.Text=$"{result.Rows.Count} 项 · {result.Rows.Sum(x=>x.Bytes)/1048576d:F1} MB";Message($"{result.Rows.Count} 个候选文件，共 {result.Rows.Sum(x=>x.Bytes)/1048576d:F1} MB；跳过 {result.Skipped} 项。最多列出 20,000 项。");});
+ private async void Processes_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  OperationText.Text="在后台采样进程…";var token=CurrentToken;
+  processRows=await ProcessService.Scan(token,ProgressForOperation());ApplyProcessFilter();
+  ProcessSummary.Text=processRows.Count==0?"未读取到可访问进程。":string.Join(" · ",processRows.Take(3).Select(x=>$"{x.Name} {x.Bytes/1048576d:F0} MB"));
+  Message($"已采样 {processRows.Count} 个进程。可搜索并按工作集、CPU 或私有提交排序。");
+ });
+ private void ProcessFilter_Changed(object sender,TextChangedEventArgs e){if(!initializing)ApplyProcessFilter();}
+ private void ProcessSort_Changed(object sender,SelectionChangedEventArgs e){if(!initializing)ApplyProcessFilter();}
+ private void ApplyProcessFilter()
+ {
+  string query=ProcessSearch.Text.Trim();IEnumerable<ProcessRow> rows=processRows;
+  if(query.Length>0)rows=rows.Where(x=>x.Name.Contains(query,StringComparison.OrdinalIgnoreCase)||x.Path.Contains(query,StringComparison.OrdinalIgnoreCase)||x.Id.ToString().Contains(query));
+  rows=ProcessSort.SelectedIndex switch {1=>rows.OrderByDescending(x=>x.Cpu),2=>rows.OrderByDescending(x=>x.PrivateBytes),_=>rows.OrderByDescending(x=>x.Bytes)};
+  Processes.ItemsSource=rows.Take(1000).ToArray();
+ }
+ private void ProcessLocation_Click(object sender,RoutedEventArgs e)
+ {
+  if(Processes.SelectedItem is not ProcessRow row||!File.Exists(row.Path)){Message("请选择路径可访问的进程。");return;}
+  try{Process.Start(new ProcessStartInfo("explorer.exe",$"/select,\"{row.Path}\""){UseShellExecute=true});}catch(Exception ex){Message(ex.Message,true);}
+ }
+ private void TaskManager_Click(object sender,RoutedEventArgs e)=>OpenSystem("taskmgr.exe");
+ private async void DiskScan_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  var token=CurrentToken;bool caches=IncludeAppCaches.IsChecked==true;
+  OperationText.Text="扫描允许目录…";var progress=ProgressForOperation();var result=await Task.Run(()=>DiskService.Scan(caches,token,progress));
+  diskRows=result.Rows;diskPage=0;UpdateDiskPage();DiskSummary.Text=$"{diskRows.Count} 项 · {diskRows.Sum(x=>x.Bytes)/1048576d:F1} MB";
+  Message($"{(result.Cancelled?"已取消，保留部分结果":result.Limited?"达到扫描边界，保留已有结果":"扫描完成")}：已检查 {result.Seen}，候选 {diskRows.Count}；记录跳过 {result.Skipped}。每页最多 250 项。");
+ });
+ private void UpdateDiskPage()
+ {
+  int pages=Math.Max(1,(diskRows.Count+249)/250);diskPage=Math.Clamp(diskPage,0,pages-1);
+  DiskList.ItemsSource=diskRows.Skip(diskPage*250).Take(250).ToArray();DiskPageText.Text=$"第 {diskPage+1}/{pages} 页 · {diskRows.Count} 项";
+ }
+ private void DiskPrevious_Click(object sender,RoutedEventArgs e){if(diskPage>0){diskPage--;UpdateDiskPage();}}
+ private void DiskNext_Click(object sender,RoutedEventArgs e){if((diskPage+1)*250<diskRows.Count){diskPage++;UpdateDiskPage();}}
  private async void DiskClean_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
-  var selected=DiskList.SelectedItems.Cast<DiskRow>().ToList();if(selected.Count==0){Message("请先勾选文件。");return;}
-  if(!await Confirm("永久删除临时文件",$"删除所选 {selected.Count} 个文件（{selected.Sum(x=>x.Bytes)/1048576d:F1} MB），不经过回收站。占用文件和扫描后变化的文件会跳过。"))return;
-  var r=await Task.Run(()=>DiskService.Delete(selected));DiskList.ItemsSource=null;DiskSummary.Text="清理完成 · 请重新扫描";Message($"删除 {r.Deleted} 个文件，{r.Bytes/1048576d:F1} MB；跳过 {r.Skipped} 个。重新扫描可刷新列表。");
+  var selected=DiskList.SelectedItems.Cast<DiskRow>().ToList();if(selected.Count==0){Message("请先勾选当前页文件。");return;}
+  if(!await Confirm("永久删除所选文件",$"删除当前页所选 {selected.Count} 个文件（{selected.Sum(x=>x.Bytes)/1048576d:F1} MB），不经过回收站。取消只影响尚未处理的文件。"))return;
+  var token=CurrentToken;var progress=ProgressForOperation();var r=await Task.Run(()=>DiskService.Delete(selected,token,progress));
+  var removed=await Task.Run(()=>selected.Where(x=>!File.Exists(x.Path)).Select(x=>x.Path).ToHashSet(StringComparer.OrdinalIgnoreCase));diskRows.RemoveAll(x=>removed.Contains(x.Path));UpdateDiskPage();DiskSummary.Text="处理完成 · 可重新扫描";
+  Message($"{(r.Cancelled?"已取消后续删除":"处理完成")}：删除 {r.Deleted} 个，{r.Bytes/1048576d:F1} MB；跳过 {r.Skipped} 个。");
  });
- private async void RegistryScan_Click(object sender,RoutedEventArgs e)=>await Run(async()=>{var rows=await Task.Run(RegistryService.Scan);RegistryList.ItemsSource=rows;RegistrySummary.Text=$"{rows.Count} 项待核对";Message($"发现 {rows.Count} 个目标缺失启动项，请核对后选择。");});
+ private async void StartupScan_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  var token=CurrentToken;OperationText.Text="枚举 Run 键与启动文件夹…";var rows=await Task.Run(()=>StartupService.Scan(token));
+  StartupList.ItemsSource=rows.Take(1000).ToArray();StartupList.Visibility=Visibility.Visible;RegistryList.Visibility=Visibility.Collapsed;
+  RegistrySummary.Text=$"{rows.Count} 个启动条目";Message($"已列出 {rows.Count} 个启动条目；最多显示 1000 项。机器级与启动文件夹只读。");
+ });
+ private void SystemStartup_Click(object sender,RoutedEventArgs e)
+ {try{Process.Start(new ProcessStartInfo("ms-settings:startupapps"){UseShellExecute=true});}catch(Exception ex){Message(ex.Message,true);}}
+ private async void StartupDisable_Click(object sender,RoutedEventArgs e)=>await ChangeStartup(true);
+ private async void StartupEnable_Click(object sender,RoutedEventArgs e)=>await ChangeStartup(false);
+ private async Task ChangeStartup(bool disable)=>await Run(async()=>
+ {
+  if(StartupList.Visibility!=Visibility.Visible||StartupList.SelectedItem is not StartupRow row||!row.Managed){Message("请选择当前用户 Run 项；其他来源请使用 Windows 设置。");return;}
+  if(row.Disabled==disable){Message(disable?"该项已经由本工具停用。":"该项不是本工具保留的停用项。");return;}
+  if(!await Confirm(disable?"备份并停用启动项":"恢复启动项",$"{row.Name}\n{row.Command}\n\n仅移动当前用户 Run 值，保留备份，不结束进程。恢复后最终状态仍受 Windows 启动设置控制。"))return;
+  CurrentToken.ThrowIfCancellationRequested();var backup=await Task.Run(()=>StartupService.SetDisabled(row,disable));
+  var rows=await Task.Run(()=>StartupService.Scan());StartupList.ItemsSource=rows.Take(1000).ToArray();Message($"{(disable?"已停用":"已还原 Run 项")}。备份：{backup}");
+ });
+ private async void RegistryScan_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  var rows=await Task.Run(RegistryService.Scan);CurrentToken.ThrowIfCancellationRequested();RegistryList.ItemsSource=rows;RegistryList.Visibility=Visibility.Visible;StartupList.Visibility=Visibility.Collapsed;
+  RegistrySummary.Text=$"{rows.Count} 项缺失目标";Message($"发现 {rows.Count} 个目标缺失启动项，请核对后选择。");
+ });
  private async void RegistryClean_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
-  var rows=RegistryList.SelectedItems.Cast<RegistryRow>().ToList();if(rows.Count==0){Message("请先勾选注册表条目。");return;}
-  if(!await Confirm("备份并删除启动项",$"删除所选 {rows.Count} 项。先保存 JSON 备份，备份失败则不删除。"))return;
-  var r=await Task.Run(()=>RegistryService.Clean(rows));RegistryList.ItemsSource=null;RegistrySummary.Text="清理完成 · 请重新检查";Message($"删除 {r.Deleted} 项，跳过 {r.Skipped} 项。备份：{r.Backup}");
+  if(RegistryList.Visibility!=Visibility.Visible){Message("请先检查缺失目标，再勾选失效项。");return;}
+  var rows=RegistryList.SelectedItems.Cast<RegistryRow>().ToList();if(rows.Count==0){Message("请先勾选失效项。");return;}
+  if(!await Confirm("备份并删除失效启动项",$"删除所选 {rows.Count} 项。备份失败则不删除。"))return;
+  CurrentToken.ThrowIfCancellationRequested();var r=await Task.Run(()=>RegistryService.Clean(rows));RegistryList.ItemsSource=null;RegistrySummary.Text="清理完成 · 请重新检查";Message($"删除 {r.Deleted} 项，跳过 {r.Skipped} 项。备份：{r.Backup}");
  });
  private async void Restore_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
-  Directory.CreateDirectory(RegistryService.BackupDirectory);
-  var picker=new Windows.Storage.Pickers.FileOpenPicker();
-  WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
-  picker.FileTypeFilter.Add(".json");
-  var file=await picker.PickSingleFileAsync();if(file==null)return;
-  if(!await Confirm("恢复启动项","仅使用你信任的 ClearNest 备份。恢复会重新启用其中的启动命令，同名现有值不会覆盖。"))return;
-  var r=await Task.Run(()=>RegistryService.Restore(file.Path));Message($"恢复 {r.Restored} 项，跳过 {r.Skipped} 项。");
+  Directory.CreateDirectory(RegistryService.BackupDirectory);var picker=new Windows.Storage.Pickers.FileOpenPicker();
+  WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));picker.FileTypeFilter.Add(".json");
+  dialogOpen=true;Windows.Storage.StorageFile? file;try{file=await picker.PickSingleFileAsync();}finally{dialogOpen=false;}if(file==null)return;
+  if(!await Confirm("恢复启动项","仅使用你信任的 ClearNest 失效项备份。恢复将重新写入启动命令，现有同名值不会覆盖。"))return;
+  CurrentToken.ThrowIfCancellationRequested();var r=await Task.Run(()=>RegistryService.Restore(file.Path));Message($"恢复 {r.Restored} 项，跳过 {r.Skipped} 项。");
  });
  private void Resident_Toggled(object sender,RoutedEventArgs e)
  {
@@ -223,5 +322,5 @@ public sealed partial class MainWindow : Window
   Resident.IsOn=DashboardResident.IsOn=preferences.Resident;initializing=false;PersistPreferences();
  }
  private void Exit_Click(object sender,RoutedEventArgs e)=>Exit();
- private void Exit(){if(busy){Message("正在操作，请等待完成后退出。");return;}exiting=true;Close();}
+ private void Exit(){if(busy){exitAfterWork=true;operationCancellation?.Cancel();activeDialog?.Hide();Message("正在取消当前任务，完成后退出。");return;}exiting=true;Close();}
 }
