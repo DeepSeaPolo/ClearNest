@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup>
-  <OutputType>WinExe</OutputType><Version>0.4.0</Version><DefaultItemExcludes>$(DefaultItemExcludes);verification/**;publish/**</DefaultItemExcludes><ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon><DebugType>embedded</DebugType><TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+  <OutputType>WinExe</OutputType><Version>0.4.1</Version><DefaultItemExcludes>$(DefaultItemExcludes);verification/**;publish/**</DefaultItemExcludes><ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon><DebugType>embedded</DebugType><TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+  <!-- WinUI single-file resource lookup must not depend on the downloaded EXE name. -->
+  <ProjectPriFileName>resources.pri</ProjectPriFileName>
   <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
   <RootNamespace>ClearNest</RootNamespace><ApplicationManifest>app.manifest</ApplicationManifest>
   <Platforms>x64</Platforms><PlatformTarget>x64</PlatformTarget><RuntimeIdentifier>win-x64</RuntimeIdentifier>
