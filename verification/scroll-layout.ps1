@@ -116,13 +116,19 @@ try {
  if(!$listPattern.Current.VerticallyScrollable){throw 'Process fixture did not produce a scrolling list'}
  $listPattern.SetScrollPercent(-1,100)
  Start-Sleep -Milliseconds 400
+ $listBounds=$list.Current.BoundingRectangle
+ [void][ScrollPointer]::SetCursorPos([int]($listBounds.Right-8),[int]($listBounds.Top+40))
+ Start-Sleep -Milliseconds 400
+ Capture-Window $Handle 'scroll-process-860'
  $bar=Vertical-Bar $list
- if($null -eq $bar){throw 'Process list scrollbar missing'}
+ $rowLimit=$listBounds.Right-20
+ if($null -ne $bar){$rowLimit=[Math]::Min($rowLimit,$bar.Current.BoundingRectangle.Left-1)}
+ else{Write-Output 'INFO: native ListView hides its scrollbar automation peer; verify row bounds against the reserved viewport gutter'}
  $items=$list.FindAll([System.Windows.Automation.TreeScope]::Descendants,(New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ListItem)))
  $checked=0
  foreach($item in $items) {
   if($item.Current.IsOffscreen){continue}
-  if($item.Current.BoundingRectangle.Right -gt $bar.Current.BoundingRectangle.Left-1){throw 'Process row overlaps scrollbar'}
+  if($item.Current.BoundingRectangle.Right -gt $rowLimit){throw 'Process row overlaps scrollbar gutter'}
   $checked++
  }
  if($checked -eq 0){throw 'No visible process rows were verified'}
