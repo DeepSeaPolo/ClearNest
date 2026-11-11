@@ -1,6 +1,8 @@
 # ClearNest · 清巢（WinUI 3 / Windows 11 x64）
 
-这是可继续开发的源码版本，尚未在 Windows 上编译或实机验收，不是已经验证的成品安装包。
+已通过 GitHub Actions Windows 编译、GUI 主窗口启动检查和 10 项核心清理保护测试。这是首版便携工具，尚未完成 Windows 11 全功能人工验收；内存回收 Native API 和托盘/迷你窗口交互仍需用户实机验证。
+
+[下载已编译运行包](https://github.com/DeepSeaPolo/ClearNest/actions/runs/42979455758)（Artifacts 中的 ClearNest-win11-x64）。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
 
 ## 构建与运行
 
@@ -16,7 +18,7 @@ Windows 11 x64；Visual Studio 2022 的 WinUI / Windows 应用开发工具、Win
 Portable 为自带 .NET 和 Windows App SDK 的完整目录，不能只复制 EXE。
 默认 ` .\build.ps1 ` 为较小的框架依赖目录，需要预装 .NET 8 Runtime x64 和 Windows App Runtime 1.8 x64。
 WinUI 3 和 .NET 本身有运行时成本；不承诺极小安装体积。SDK 固定为 1.8.12 以便复现；该分支已结束维护，正式发布前需要迁移到受支持分支并回归测试。
-附带 GitHub Actions Windows 构建配置；没有在本次交付中运行此工作流。
+附带 GitHub Actions Windows 构建配置；已在 Windows Server 2025 构建并通过主窗口启动检查。测试不主动清空系统待机缓存，只操作自动生成的临时文件与测试注册表值。
 
 ## 已实现范围
 
@@ -47,7 +49,7 @@ NtSetSystemInformation / SystemMemoryListInformation 是非公开的系统接口
 备份在 `%LOCALAPPDATA%\ClearNest\RegistryBackups`。备份可包含私人路径和启动命令，请妥善保管。
 注册表删除并非事务；部分失败时以报告的数量为准，备份可用于恢复。无法确定是否无用的项不会自动判定。
 
-## Windows 验收清单（待执行）
+## Windows 11 完整人工验收清单（待执行）
 
 1. 执行两种发布配置，运行主窗口，切换四个标签页。
 2. 开关常驻，关闭/恢复主窗口，打开/关闭迷你窗口，退出后验证无残留进程与托盘。
@@ -63,3 +65,14 @@ NtSetSystemInformation / SystemMemoryListInformation 是非公开的系统接口
 https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/unpackage-winui-app
 https://learn.microsoft.com/en-us/windows/win32/memory/memory-performance-information
 https://learn.microsoft.com/en-us/windows/win32/memory/working-set
+
+## 已执行的自动验证
+
+- 内存状态读取有效。
+- 旧的已选临时文件可以删除。
+- 近期文件、扫描后变化的文件、被独占打开的文件和允许目录之外的文件均保留。
+- 目标缺失的测试启动项可识别、备份后删除、精确恢复。
+- 恢复跳过现有同名值。
+- 自包含发布生成 Windows PE EXE；GUI 主窗口成功出现，启动 12 秒内未退出。
+
+构建对应源码提交：`c000ad7d016b4c6f2f2514b3b4d5dffd590e8464`。本次文档更新未改变程序代码。
