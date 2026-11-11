@@ -124,3 +124,32 @@ finally
  using(var key=Registry.CurrentUser.OpenSubKey(@"Software\ClearNest\DisabledStartup",true))key?.DeleteValue(startupName,false);
  foreach(var startupBackupPath in startupBackups)File.Delete(startupBackupPath);
 }
+
+Check(NetworkService.NormalizeHost("  example.com  ")=="example.com","network target input is normalized");
+foreach(var badHost in new[]{"https://example.com","example.com/path","example.com & whoami","example.com:443",""})
+{
+ try{NetworkService.NormalizeHost(badHost);throw new Exception("Invalid network target was accepted");}
+ catch(ArgumentException){Console.WriteLine("PASS: invalid network target rejected");}
+}
+using(var cancelledNetwork=new CancellationTokenSource())
+{
+ cancelledNetwork.Cancel();
+ try{await NetworkService.DiagnoseAsync("localhost",null,cancelledNetwork.Token);throw new Exception("Network cancellation ignored");}
+ catch(OperationCanceledException){Console.WriteLine("PASS: network diagnosis honors cancellation before I/O");}
+}
+var listener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback,0);
+listener.Start();
+try
+{
+ int port=((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+ var accepting=listener.AcceptTcpClientAsync();
+ await NetworkService.ProbeTcpAsync(new[]{System.Net.IPAddress.Loopback},port,CancellationToken.None);
+ using var accepted=await accepting;
+ Check(accepted.Connected,"network TCP probe reaches a local disposable listener");
+}
+finally{listener.Stop();}
+var adapterReport=await Task.Run(()=>NetworkService.ReadAdapters());
+Check(adapterReport.Length>0,"network adapter inspection produces a report without changing settings");
+try{await NetworkService.RepairAsync((NetworkRepair)999,CancellationToken.None);throw new Exception("Invalid repair accepted");}
+catch(ArgumentOutOfRangeException){Console.WriteLine("PASS: invalid repair operation rejected without running system commands");}
+Console.WriteLine("Network checks did not clear DNS or reset any system networking.");
