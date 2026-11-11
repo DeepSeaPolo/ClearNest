@@ -2,7 +2,15 @@
 
 已通过 Windows 编译、单 EXE 独立启动、清理保护、启动项恢复、主题和后台采样期间窗口切换测试。完整 Windows 11 人工验收仍待完成；待机缓存回收使用非公开系统接口。
 
-[下载 v0.4.0 单文件 EXE](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.4.0/ClearNest-v0.4.0-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.4.0)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
+[下载 v0.4.1 单文件 EXE](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.4.1/ClearNest-v0.4.1-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.4.1)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
+
+## v0.4.1 启动修复
+
+v0.4.0 发布前只验证了原名 `ClearNest.exe`，发布时改名后可能触发 WinUI 资源查找问题，表现为双击后无窗口、进程立即退出。旧包可先恢复原名 `ClearNest.exe`；v0.4.1 使用固定 `resources.pri` 修复资源查找。回归测试覆盖原名、最终发布名及浏览器重复下载的 ` (1)` 文件名，并使用独立目录和全新解包缓存。
+
+若托管启动阶段仍失败，程序显示错误并尽力写入 `%LOCALAPPDATA%\ClearNest\Logs\startup.log`。原生加载器或 .NET 主机在托管代码前退出时，无法保证生成此日志。
+
+参考上游问题与修复建议：https://github.com/microsoft/WindowsAppSDK/issues/6248
 
 ## v0.4.0 功能与响应性
 
