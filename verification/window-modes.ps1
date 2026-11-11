@@ -1,3 +1,4 @@
+param([string]$Executable="publish/isolated/ClearNest.exe")
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -27,7 +28,7 @@ function Find-Window($processId, $title) {
    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$processId)),
    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $title))
  )
- for ($attempt=0; $attempt -lt 30; $attempt++) {
+ for ($attempt=0; $attempt -lt 60; $attempt++) {
   $element = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,$condition)
   if ($null -ne $element) {return $element}
   Start-Sleep -Milliseconds 500
@@ -42,12 +43,47 @@ function Invoke-Button($root, $automationId) {
  $pattern.Invoke()
  Start-Sleep -Seconds 1
 }
-$app = Start-Process -FilePath (Resolve-Path 'publish/portable/ClearNest.exe') -PassThru
+$app = Start-Process -FilePath (Resolve-Path $Executable) -PassThru
 try {
  $main = Find-Window $app.Id ('ClearNest '+[char]0xB7+' '+[char]0x6E05+[char]0x5DE2)
  $mainHandle = [IntPtr]$main.Current.NativeWindowHandle
+ $screen=[System.Windows.Automation.AutomationElement]::RootElement.Current.BoundingRectangle
+ if ($main.Current.BoundingRectangle.Width -gt $screen.Width -or $main.Current.BoundingRectangle.Height -gt $screen.Height) {
+  $main.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Maximized)
+  Start-Sleep -Seconds 1
+ }
  Start-Sleep -Seconds 2
  Capture-Window $mainHandle 'main'
+ $navCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenSettings')
+ $settings=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$navCondition)
+ $settings.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Seconds 1
+ $darkCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ThemeDark')
+ $dark=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$darkCondition)
+ $dark.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Seconds 1
+ $preferences=Get-Content "$env:LOCALAPPDATA/ClearNest/preferences.json" -Raw | ConvertFrom-Json
+ if ($preferences.Theme -ne 'Dark') {throw 'Dark theme was not persisted'}
+ Write-Output 'PASS: dark theme selected and persisted through native UI'
+ Capture-Window $mainHandle 'settings-dark'
+ $homeCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenHome')
+ $homeElement=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$homeCondition)
+ $homeElement.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Seconds 1
+ Capture-Window $mainHandle 'dashboard-dark' 
+ $identity=[System.Security.Principal.WindowsIdentity]::GetCurrent()
+ try {$admin=(New-Object System.Security.Principal.WindowsPrincipal($identity)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)} finally {$identity.Dispose()}
+ if ($admin) {
+  $autoCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'AutoIntervalToggle')
+  $autoToggle=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$autoCondition)
+  $autoToggle.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+  Start-Sleep -Seconds 1
+  $autoPreferences=Get-Content "$env:LOCALAPPDATA/ClearNest/preferences.json" -Raw | ConvertFrom-Json
+  if (!$autoPreferences.AutoIntervalEnabled) {throw 'Automatic interval setting was not saved'}
+  $autoToggle.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+  Write-Output 'PASS: interval automation opt-in is persisted; no reclamation invoked during test'
+ }
+
  for ($cycle=0; $cycle -lt 3; $cycle++) {
   Invoke-Button $main 'SwitchToMini'
   $mini = Find-Window $app.Id 'ClearNest Mini'
@@ -61,6 +97,22 @@ try {
   if ([WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini remains visible after returning to main'}
   Write-Output "PASS: Main mode hides Mini window (cycle $cycle)"
  }
+ # Verify a worker scan does not lock window-mode navigation.
+ $scanCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ScanProcessHome')
+ $scanButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$scanCondition)
+ $latency=[System.Diagnostics.Stopwatch]::StartNew()
+ $scanButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ $switchCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'SwitchToMini')
+ $switchButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$switchCondition)
+ $switchButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ $busyMini=Find-Window $app.Id 'ClearNest Mini'
+ if ([WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window stayed visible during worker scan switch'}
+ if ($latency.Elapsed.TotalSeconds -gt 5) {throw 'Worker scan blocked native window switching beyond test budget'}
+ Invoke-Button $busyMini 'ReturnToMain'
+ $cancelCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'CancelOperation')
+ $cancelButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$cancelCondition)
+ if ($null -ne $cancelButton -and !$cancelButton.Current.IsOffscreen) {$cancelButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()}
+ Write-Output "PASS: worker scan permits Mini switching ($($latency.Elapsed.TotalMilliseconds) ms including UI automation)"
  Write-Output 'Native window mode checks passed'
 } finally {
  $app.Refresh()

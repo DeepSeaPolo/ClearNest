@@ -66,3 +66,61 @@ finally
     if(backup!=null)File.Delete(backup);
 }
 Console.WriteLine("All cleanup checks passed. Only test fixtures were modified.");
+
+var previousPreferences=File.Exists(Preferences.FilePath)?File.ReadAllBytes(Preferences.FilePath):null;
+try
+{
+ var preferences=new Preferences {Theme="Dark",Accent="Teal",Mica=false,Resident=true,MiniOnTop=false,StartInMini=true,RefreshSeconds=10};
+ preferences.Save();var loaded=Preferences.Load();
+ Check(loaded.Theme=="Dark"&&loaded.Accent=="Teal"&&!loaded.Mica&&loaded.Resident&&!loaded.MiniOnTop&&loaded.StartInMini&&loaded.RefreshSeconds==10,"appearance and behavior settings persist");
+ preferences.Theme="invalid";preferences.Accent="invalid";preferences.RefreshSeconds=-1;preferences.Save();loaded=Preferences.Load();
+ Check(loaded.Theme=="System"&&loaded.Accent=="Indigo"&&loaded.RefreshSeconds==5,"invalid setting values fall back to supported defaults");
+}
+finally
+{
+ if(previousPreferences==null)File.Delete(Preferences.FilePath);else File.WriteAllBytes(Preferences.FilePath,previousPreferences);
+}
+
+var autoPreferences=new Preferences {AutoIntervalEnabled=true,AutoIntervalMinutes=15};
+var policy=new AutoReclaimPolicy();var start=DateTimeOffset.UtcNow;policy.Configure(autoPreferences,start);
+Check(policy.GetDue(autoPreferences,start.AddMinutes(14),40)==null,"scheduled cleanup waits for its interval");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(15),40)!=null,"scheduled cleanup becomes due without catch-up bursts");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(16),40)==null,"automatic cleanup respects the cooldown");
+autoPreferences.AutoIntervalEnabled=false;autoPreferences.AutoThresholdEnabled=true;autoPreferences.AutoThresholdPercent=85;
+policy.Configure(autoPreferences,start.AddMinutes(20));
+Check(policy.GetDue(autoPreferences,start.AddMinutes(20),90)!=null,"high memory usage triggers threshold policy");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(30),90)==null,"sustained high usage does not repeatedly reclaim");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(31),79)==null,"threshold policy rearms after occupancy falls");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(32),86)!=null,"threshold policy can trigger after recovery and a new rise");
+autoPreferences.AutoThresholdEnabled=false;
+Check(policy.GetDue(autoPreferences,start.AddHours(2),99)==null,"disabled automatic policies never trigger");
+
+var cancelled=new System.Threading.CancellationTokenSource();cancelled.Cancel();
+Check(DiskService.Scan(false,cancelled.Token).Cancelled,"directory scan honors pre-cancellation");
+try{await ProcessService.Scan(cancelled.Token);throw new Exception("process cancellation ignored");}catch(OperationCanceledException){Console.WriteLine("PASS: process sampling is cancellable");}
+var processes=await ProcessService.Scan();Check(processes.Count>0&&processes.All(x=>x.Cpu>=0&&x.Cpu<=100&&x.Bytes>=0&&x.PrivateBytes>=0),"worker process scan returns bounded CPU and memory measurements");
+var diagnostics=MemoryDiagnostics.Read();Check(diagnostics.CommitLimit>0&&diagnostics.PhysicalAvailable<=diagnostics.PhysicalTotal,"memory diagnostics expose real commit and physical capacity");
+var startupName="ClearNest-Startup-Test-"+Guid.NewGuid().ToString("N");
+var startupCommand="\"%LOCALAPPDATA%\\ClearNestFixture-"+Guid.NewGuid().ToString("N")+"\\app.exe\" --fixture";
+var startupBackups=new List<string>();
+try
+{
+ using(var key=Registry.CurrentUser.CreateSubKey(keyPath,true))key.SetValue(startupName,startupCommand,RegistryValueKind.ExpandString);
+ var row=StartupService.Scan().Single(x=>x.Name==startupName&&!x.Disabled);
+ Check(row.Managed&&row.Command==startupCommand,"startup enumeration preserves unexpanded command data");
+ startupBackups.Add(StartupService.SetDisabled(row,true));
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath))Check(key?.GetValue(startupName)==null,"startup disable removes only selected current-user Run value");
+ row=StartupService.Scan().Single(x=>x.Name==startupName&&x.Disabled);
+ Check(row.Command==startupCommand&&startupBackups.All(File.Exists),"startup disable retains recoverable value and durable backup");
+ using(var key=Registry.CurrentUser.CreateSubKey(keyPath,true))key.SetValue(startupName,"existing fixture",RegistryValueKind.String);
+ try{StartupService.SetDisabled(row,false);throw new Exception("startup overwrite accepted");}catch(IOException){Console.WriteLine("PASS: startup restore rejects destination conflicts");}
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath,true))key!.DeleteValue(startupName);
+ startupBackups.Add(StartupService.SetDisabled(row,false));
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath))Check((string?)key?.GetValue(startupName,null,RegistryValueOptions.DoNotExpandEnvironmentNames)==startupCommand&&key.GetValueKind(startupName)==RegistryValueKind.ExpandString,"startup restore preserves exact command and registry kind");
+}
+finally
+{
+ using(var key=Registry.CurrentUser.OpenSubKey(keyPath,true))key?.DeleteValue(startupName,false);
+ using(var key=Registry.CurrentUser.OpenSubKey(@"Software\ClearNest\DisabledStartup",true))key?.DeleteValue(startupName,false);
+ foreach(var startupBackupPath in startupBackups)File.Delete(startupBackupPath);
+}
