@@ -97,8 +97,9 @@ public sealed partial class MainWindow : Window
   if(Math.Abs(scale-windowScale)<0.001)return;windowScale=scale;
   if(AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
   {
-   presenter.PreferredMinimumWidth=(int)Math.Ceiling(500*scale);
-   presenter.PreferredMinimumHeight=(int)Math.Ceiling(600*scale);
+   var work=Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id,Microsoft.UI.Windowing.DisplayAreaFallback.Nearest).WorkArea;
+   presenter.PreferredMinimumWidth=Math.Min((int)Math.Ceiling(500*scale),work.Width);
+   presenter.PreferredMinimumHeight=Math.Min((int)Math.Ceiling(600*scale),work.Height);
   }
  }
  private static ScrollViewer DialogText(string text,UIElement owner)=>new()
