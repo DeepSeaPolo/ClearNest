@@ -50,6 +50,28 @@ function Assert-MemoryCard($root) {
  if($total -le 0 -or [Math]::Abs($used+$available-$total) -gt 0.021 -or [Math]::Abs($used*100/$total-$percent) -gt 0.3){throw "Displayed percent does not match displayed physical capacity: $percentText / $capacityText"}
  Write-Output "PASS: visible memory percentage matches used/total/available capacity: $percentText"
 }
+function Assert-DiagnosticDialog($owner,$ownerHandle) {
+ Invoke-Button $owner 'MemoryDiagnose'
+ $condition=New-Object System.Windows.Automation.AndCondition(
+  (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$app.Id)),
+  (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'MemoryDiagnosticDialog'))
+ )
+ $dialog=$null
+ for($attempt=0;$attempt -lt 30 -and $null -eq $dialog;$attempt++) {
+  $dialog=[System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
+  if($null -eq $dialog){Start-Sleep -Milliseconds 200}
+ }
+ if($null -eq $dialog){throw 'Diagnostic dialog did not appear'}
+ $bounds=$owner.Current.BoundingRectangle;$rect=$dialog.Current.BoundingRectangle
+ if($rect.Left -lt $bounds.Left-1 -or $rect.Right -gt $bounds.Right+1 -or $rect.Top -lt $bounds.Top-1 -or $rect.Bottom -gt $bounds.Bottom+1){throw 'Diagnostic dialog exceeds its owning window'}
+ $closeLabel=-join(@(0x5173,0x95ED)|ForEach-Object{[char]$_})
+ $close=$dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants,(New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$closeLabel)))
+ if($null -eq $close -or $close.Current.IsOffscreen){throw 'Diagnostic close action is clipped'}
+ Capture-Window $ownerHandle 'audit-mini-diagnostic-dialog'
+ $close.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ Start-Sleep -Milliseconds 700
+ Write-Output 'PASS: Mini diagnostic text scrolls within its owner and the close action remains visible'
+}
 function Invoke-Button($root, $automationId) {
  $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$automationId)
  $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
@@ -113,6 +135,7 @@ try {
    $barCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ProgressBar)
    if($null -ne $mini.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$barCondition)){throw 'Mini still contains a memory progress bar'}
    Write-Output 'PASS: Mini renders the shared memory card without a progress bar'
+   if($Executable -like '*isolated*'){Assert-DiagnosticDialog $mini $miniHandle}
   }
   Invoke-Button $mini 'ReturnToMain'
   if (![WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window did not return'}
@@ -160,6 +183,8 @@ try {
  Write-Output 'PASS: native network page displays adapter information without resetting networking'
  $homeElement.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
  Start-Sleep -Milliseconds 500
+
+ if($Executable -like '*isolated*'){& ./verification/scroll-layout.ps1 -Main $main -Handle $mainHandle}
 
  # Verify a worker scan does not lock window-mode navigation.
  $scanCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ScanProcessHome')

@@ -41,14 +41,14 @@ try {
   Write-Host 'REPRODUCED: published v0.4.0 starts as ClearNest.exe but exits under its public asset filename'
  }
  $source=Resolve-Path 'publish/single/ClearNest.exe'
- $asset='ClearNest-v0.5.0-win11-x64.exe'
+ $asset='ClearNest-v0.5.1-win11-x64.exe'
  New-Item -ItemType Directory -Force 'publish/release' | Out-Null
  Copy-Item $source (Join-Path 'publish/release' $asset)
  # Test the exact bytes and final filename that will be uploaded, plus a browser duplicate name.
  $cases=@(
   @{Name='canonical';Path='publish/isolated/ClearNest.exe'},
   @{Name='release';Path=(Join-Path 'publish/release' $asset)},
-  @{Name='browser-duplicate';Path='publish/download check/ClearNest-v0.5.0-win11-x64 (1).exe'}
+  @{Name='browser-duplicate';Path='publish/download check/ClearNest-v0.5.1-win11-x64 (1).exe'}
  )
  foreach($case in $cases) {
   if($case.Name -eq 'browser-duplicate') {

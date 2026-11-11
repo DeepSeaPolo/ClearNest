@@ -46,6 +46,7 @@ public sealed partial class MainWindow : Window
   InitializeComponent();MemoryPanel.Bind(memoryTimeline);Title="ClearNest · 清巢";AppWindow.Resize(new SizeInt32(1120,880));
   ExtendsContentIntoTitleBar=true;SetTitleBar(TitleRegion);AppIconService.ApplyTo(this);TitleAppIcon.Source=AppIconService.CreateImage();
   Root.ActualThemeChanged+=(_,_)=>UpdateCaption();
+  Root.Loaded+=(_,_)=>{UpdateWindowMinimum();Root.XamlRoot.Changed+=(_,_)=>UpdateWindowMinimum();};
   try{preferences=Preferences.Load();}catch(Exception){Message("无法读取设置，已使用默认外观。");}
   ThemeSystem.IsChecked=preferences.Theme=="System";ThemeLight.IsChecked=preferences.Theme=="Light";ThemeDark.IsChecked=preferences.Theme=="Dark";
   AccentChoice.SelectedIndex=Array.IndexOf(new[]{"Indigo","Purple","Teal","Rose","Amber"},preferences.Accent);
@@ -89,10 +90,28 @@ public sealed partial class MainWindow : Window
  }
  private void CancelOperation_Click(object sender,RoutedEventArgs e)
  {operationCancellation?.Cancel();CancelOperation.IsEnabled=false;OperationText.Text="正在取消，等待当前系统调用结束…";}
+ private double windowScale;
+ private void UpdateWindowMinimum()
+ {
+  double scale=Root.XamlRoot.RasterizationScale;
+  if(Math.Abs(scale-windowScale)<0.001)return;windowScale=scale;
+  if(AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+  {
+   var work=Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(AppWindow.Id,Microsoft.UI.Windowing.DisplayAreaFallback.Nearest).WorkArea;
+   presenter.PreferredMinimumWidth=Math.Min((int)Math.Ceiling(500*scale),work.Width);
+   presenter.PreferredMinimumHeight=Math.Min((int)Math.Ceiling(600*scale),work.Height);
+  }
+ }
+ private static ScrollViewer DialogText(string text,UIElement owner)=>new()
+ {
+  HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,
+  MaxHeight=Math.Min(440,Math.Max(60,owner.XamlRoot.Size.Height-200)),
+  Content=new TextBlock {Text=text,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,24,0)}
+ };
  private async Task<bool> Confirm(string title,string text)
  {
   var owner=miniMode&&mini!=null?mini.Content:Content;
-  var dialog=new ContentDialog {Title=title,Content=new TextBlock {Text=text,TextWrapping=TextWrapping.Wrap},PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=owner.XamlRoot};
+  var dialog=new ContentDialog {RequestedTheme=PreferredTheme,Title=title,Content=DialogText(text,owner),PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=owner.XamlRoot};
   dialogOpen=true;activeDialog=dialog;try{return await dialog.ShowAsync()==ContentDialogResult.Primary;}finally{dialogOpen=false;activeDialog=null;}
  }
  private void Navigation_SelectionChanged(NavigationView sender,NavigationViewSelectionChangedEventArgs args)
@@ -244,7 +263,8 @@ public sealed partial class MainWindow : Window
  private async void Diagnostics_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
   OperationText.Text="读取提交量与系统性能计数器…";var report=await Task.Run(MemoryDiagnostics.Read);CurrentToken.ThrowIfCancellationRequested();
-  var dialog=new ContentDialog {Title="内存与提交压力诊断",Content=new ScrollViewer {Content=new TextBlock {Text=report.Describe(),TextWrapping=TextWrapping.Wrap},MaxHeight=440},PrimaryButtonText="系统虚拟内存设置",CloseButtonText="关闭",XamlRoot=(miniMode&&mini!=null?mini.Content:Content).XamlRoot};
+  var dialog=new ContentDialog {RequestedTheme=PreferredTheme,Title="内存与提交压力诊断",Content=DialogText(report.Describe(),miniMode&&mini!=null?mini.Content:Content),PrimaryButtonText="系统虚拟内存设置",CloseButtonText="关闭",XamlRoot=(miniMode&&mini!=null?mini.Content:Content).XamlRoot};
+  Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(dialog,"MemoryDiagnosticDialog");
   dialogOpen=true;activeDialog=dialog;try{if(await dialog.ShowAsync()==ContentDialogResult.Primary)OpenSystem("SystemPropertiesAdvanced.exe");}finally{dialogOpen=false;activeDialog=null;}
  });
  private void OpenSystem(string name)
