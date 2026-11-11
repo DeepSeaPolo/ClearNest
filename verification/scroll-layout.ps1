@@ -8,8 +8,24 @@ public static class ScrollPointer {
 '@
 function Element-Id([string]$id) {
  $condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$id)
- $element=$Main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
- if($null -eq $element){throw "UI element missing: $id"}
+ $element=$null
+ for($retry=0;$retry -lt 3 -and $null -eq $element;$retry++) {
+  $root=[System.Windows.Automation.AutomationElement]::FromHandle($Handle)
+  $element=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
+  if($null -eq $element){Start-Sleep -Milliseconds 200}
+ }
+ # WinUI can recreate compact navigation peers during resizing; resolve their accessible names as a fallback.
+ $labels=@{
+  OpenHome=@(0x4EEA,0x8868,0x76D8);OpenSettings=@(0x8BBE,0x7F6E);
+  OpenNetwork=@(0x7F51,0x7EDC,0x5DE5,0x5177);OpenProcesses=@(0x8FDB,0x7A0B,0x5217,0x8868);
+  OpenFiles=@(0x4E34,0x65F6,0x6587,0x4EF6);OpenStartup=@(0x542F,0x52A8,0x9879,0x7BA1,0x7406)
+ }
+ if($null -eq $element -and $labels.ContainsKey($id)) {
+  $label=-join($labels[$id]|ForEach-Object{[char]$_})
+  $byName=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$label)
+  $element=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$byName)
+ }
+ if($null -eq $element){throw "UI element missing after resize: $id"}
  return $element
 }
 function Select-Page([string]$id) {
