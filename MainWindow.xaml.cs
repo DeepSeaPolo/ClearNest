@@ -111,7 +111,7 @@ public sealed partial class MainWindow : Window
  private async Task<bool> Confirm(string title,string text)
  {
   var owner=miniMode&&mini!=null?mini.Content:Content;
-  var dialog=new ContentDialog {Title=title,Content=DialogText(text,owner),PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=owner.XamlRoot};
+  var dialog=new ContentDialog {RequestedTheme=PreferredTheme,Title=title,Content=DialogText(text,owner),PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=owner.XamlRoot};
   dialogOpen=true;activeDialog=dialog;try{return await dialog.ShowAsync()==ContentDialogResult.Primary;}finally{dialogOpen=false;activeDialog=null;}
  }
  private void Navigation_SelectionChanged(NavigationView sender,NavigationViewSelectionChangedEventArgs args)
@@ -263,7 +263,7 @@ public sealed partial class MainWindow : Window
  private async void Diagnostics_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
   OperationText.Text="读取提交量与系统性能计数器…";var report=await Task.Run(MemoryDiagnostics.Read);CurrentToken.ThrowIfCancellationRequested();
-  var dialog=new ContentDialog {Title="内存与提交压力诊断",Content=DialogText(report.Describe(),miniMode&&mini!=null?mini.Content:Content),PrimaryButtonText="系统虚拟内存设置",CloseButtonText="关闭",XamlRoot=(miniMode&&mini!=null?mini.Content:Content).XamlRoot};
+  var dialog=new ContentDialog {RequestedTheme=PreferredTheme,Title="内存与提交压力诊断",Content=DialogText(report.Describe(),miniMode&&mini!=null?mini.Content:Content),PrimaryButtonText="系统虚拟内存设置",CloseButtonText="关闭",XamlRoot=(miniMode&&mini!=null?mini.Content:Content).XamlRoot};
   Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(dialog,"MemoryDiagnosticDialog");
   dialogOpen=true;activeDialog=dialog;try{if(await dialog.ShowAsync()==ContentDialogResult.Primary)OpenSystem("SystemPropertiesAdvanced.exe");}finally{dialogOpen=false;activeDialog=null;}
  });
