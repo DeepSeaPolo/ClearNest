@@ -14,7 +14,7 @@ Windows 11 x64；Visual Studio 2022 的 WinUI / Windows 应用开发工具、Win
 ```
 
 Portable 为自带 .NET 和 Windows App SDK 的完整目录，不能只复制 EXE。
-默认 ` .\build.ps1 ` 为较小的框架依赖目录，需要预装 .NET 8 Windows Desktop Runtime x64 和 Windows App Runtime 1.8 x64。
+默认 ` .\build.ps1 ` 为较小的框架依赖目录，需要预装 .NET 8 Runtime x64 和 Windows App Runtime 1.8 x64。
 WinUI 3 和 .NET 本身有运行时成本；不承诺极小安装体积。SDK 固定为 1.8.12 以便复现；该分支已结束维护，正式发布前需要迁移到受支持分支并回归测试。
 附带 GitHub Actions Windows 构建配置；没有在本次交付中运行此工作流。
 

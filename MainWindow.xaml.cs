@@ -11,18 +11,13 @@ namespace ClearNest;
 public sealed partial class MainWindow : Window
 {
  private readonly DispatcherTimer timer=new();
- private readonly System.Windows.Forms.NotifyIcon tray;
+ private readonly TrayService tray;
  private MiniWindow? mini; private bool exiting,busy;
  private readonly string settings=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClearNest","resident.txt");
  public MainWindow()
  {
   InitializeComponent();Title="ClearNest · 清巢";SystemBackdrop=new Microsoft.UI.Xaml.Media.MicaBackdrop();AppWindow.Resize(new SizeInt32(960,760));
-  tray=new System.Windows.Forms.NotifyIcon {Text="ClearNest · 清巢",Icon=System.Drawing.SystemIcons.Application,Visible=true};
-  var menu=new System.Windows.Forms.ContextMenuStrip();
-  menu.Items.Add("打开主窗口",null,(_,_)=>DispatcherQueue.TryEnqueue(ShowMain));
-  menu.Items.Add("迷你窗口",null,(_,_)=>DispatcherQueue.TryEnqueue(ShowMini));
-  menu.Items.Add("退出",null,(_,_)=>DispatcherQueue.TryEnqueue(Exit));
-  tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>DispatcherQueue.TryEnqueue(ShowMain);
+  tray=new TrayService(ShowMain,ShowMini,Exit);
   try{Resident.IsOn=File.Exists(settings)&&File.ReadAllText(settings)=="true";}catch(Exception){Message("无法读取常驻设置，默认关闭。");}
   AppWindow.Closing+=(_,args)=>{if(!exiting&&(busy||Resident.IsOn)){args.Cancel=true;if(!busy)AppWindow.Hide();else Message("正在操作，请等待完成后关闭。");}};
   Closed+=(_,_)=>{exiting=true;timer.Stop();tray.Dispose();mini?.Close();Microsoft.UI.Xaml.Application.Current.Exit();};
@@ -71,10 +66,12 @@ public sealed partial class MainWindow : Window
  private async void Restore_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
   Directory.CreateDirectory(RegistryService.BackupDirectory);
-  using var picker=new System.Windows.Forms.OpenFileDialog {Filter="ClearNest 备份 (*.json)|*.json",InitialDirectory=RegistryService.BackupDirectory};
-  if(picker.ShowDialog()!=System.Windows.Forms.DialogResult.OK)return;
+  var picker=new Windows.Storage.Pickers.FileOpenPicker();
+  WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+  picker.FileTypeFilter.Add(".json");
+  var file=await picker.PickSingleFileAsync();if(file==null)return;
   if(!await Confirm("恢复启动项","仅使用你信任的 ClearNest 备份。恢复会重新启用其中的启动命令，同名现有值不会覆盖。"))return;
-  var r=await Task.Run(()=>RegistryService.Restore(picker.FileName));Message($"恢复 {r.Restored} 项，跳过 {r.Skipped} 项。");
+  var r=await Task.Run(()=>RegistryService.Restore(file.Path));Message($"恢复 {r.Restored} 项，跳过 {r.Skipped} 项。");
  });
  private void Resident_Toggled(object sender,RoutedEventArgs e)
  {if(settings==null)return;try{Directory.CreateDirectory(Path.GetDirectoryName(settings)!);File.WriteAllText(settings,Resident.IsOn?"true":"false");}catch(Exception ex){Message(ex.Message,true);}}
