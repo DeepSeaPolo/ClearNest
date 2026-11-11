@@ -35,6 +35,21 @@ function Find-Window($processId, $title) {
  }
  throw "Window did not appear: $title"
 }
+function Assert-MemoryCard($root) {
+ $percentCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'MemoryUsageValue')
+ $capacityCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'MemoryCapacityValue')
+ $percentText=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$percentCondition).Current.Name
+ $capacityText=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$capacityCondition).Current.Name
+ if(!$percentText -or !$capacityText){throw "Visible memory card fields unavailable: percent=[$percentText], capacity=[$capacityText]"}
+ $values=[regex]::Matches($capacityText,'([0-9]+(?:[.,][0-9]+)?) GB')
+ if($values.Count -ne 3 -or !$percentText.EndsWith('%')){throw "Memory card format invalid: $percentText / $capacityText"}
+ $used=[double]::Parse($values[0].Groups[1].Value.Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ $total=[double]::Parse($values[1].Groups[1].Value.Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ $available=[double]::Parse($values[2].Groups[1].Value.Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ $percent=[double]::Parse($percentText.TrimEnd('%').Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ if($total -le 0 -or [Math]::Abs($used+$available-$total) -gt 0.021 -or [Math]::Abs($used*100/$total-$percent) -gt 0.3){throw "Displayed percent does not match displayed physical capacity: $percentText / $capacityText"}
+ Write-Output "PASS: visible memory percentage matches used/total/available capacity: $percentText"
+}
 function Invoke-Button($root, $automationId) {
  $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$automationId)
  $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
@@ -84,6 +99,7 @@ try {
   Write-Output 'PASS: interval automation opt-in is persisted; no reclamation invoked during test'
  }
 
+ Assert-MemoryCard $main
  for ($cycle=0; $cycle -lt 3; $cycle++) {
   Invoke-Button $main 'SwitchToMini'
   $mini = Find-Window $app.Id 'ClearNest Mini'
@@ -91,12 +107,60 @@ try {
   if ([WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window remains visible in Mini mode'}
   if (![WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini window is hidden in Mini mode'}
   Write-Output "PASS: Mini mode hides main window (cycle $cycle)"
-  if ($cycle -eq 0) {Capture-Window $miniHandle 'mini'}
+  if ($cycle -eq 0) {
+   Capture-Window $miniHandle 'mini'
+   Assert-MemoryCard $mini
+   $barCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ProgressBar)
+   if($null -ne $mini.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$barCondition)){throw 'Mini still contains a memory progress bar'}
+   Write-Output 'PASS: Mini renders the shared memory card without a progress bar'
+  }
   Invoke-Button $mini 'ReturnToMain'
   if (![WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window did not return'}
   if ([WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini remains visible after returning to main'}
+  if($cycle -eq 0){Assert-MemoryCard $main}
   Write-Output "PASS: Main mode hides Mini window (cycle $cycle)"
  }
+
+ # Exercise real process redirection in normal, Mini and resident-hidden states.
+ function Test-Reactivation {
+  $second=Start-Process -FilePath (Resolve-Path $Executable) -PassThru
+  try {
+   if(!$second.WaitForExit(10000)){throw 'A second application process remained running'}
+   if($second.ExitCode -ne 0){throw "Secondary launch failed: $($second.ExitCode)"}
+   Start-Sleep -Milliseconds 700
+   if(![WindowProbe]::IsWindowVisible($mainHandle)){throw 'Secondary launch did not restore the existing main window'}
+   $app.Refresh();if($app.HasExited){throw 'Primary instance exited during reactivation'}
+  } finally {$second.Refresh();if(!$second.HasExited){Stop-Process -Id $second.Id -Force}}
+ }
+ Test-Reactivation
+ Write-Output 'PASS: second launch exits and restores the existing main window'
+ Invoke-Button $main 'SwitchToMini'
+ Test-Reactivation
+ if([WindowProbe]::IsWindowVisible($miniHandle)){throw 'Mini remained visible after secondary launch restored main'}
+ Write-Output 'PASS: second launch restores main from Mini without creating another instance'
+ $residentCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ResidentHome')
+ $resident=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$residentCondition).GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+ $residentWasOn=$resident.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On
+ if(!$residentWasOn){$resident.Toggle();Start-Sleep -Milliseconds 300}
+ $main.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+ Start-Sleep -Milliseconds 300
+ if([WindowProbe]::IsWindowVisible($mainHandle)){throw 'Resident close did not hide main'}
+ Test-Reactivation
+ if(!$residentWasOn){$resident.Toggle()}
+ Write-Output 'PASS: second launch restores the resident-hidden primary window'
+ $networkCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenNetwork')
+ $network=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$networkCondition)
+ $network.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Milliseconds 500
+ Invoke-Button $main 'RefreshNetwork'
+ $adapterCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'NetworkAdapters')
+ $adapterValue=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$adapterCondition).GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+ if($adapterValue.Length -lt 20 -or $adapterValue.StartsWith([string][char]0x70B9)){throw 'Network adapter inspection did not update the native UI'}
+ Capture-Window $mainHandle 'network'
+ Write-Output 'PASS: native network page displays adapter information without resetting networking'
+ $homeElement.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Milliseconds 500
+
  # Verify a worker scan does not lock window-mode navigation.
  $scanCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ScanProcessHome')
  $scanButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$scanCondition)
