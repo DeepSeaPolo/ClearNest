@@ -97,6 +97,47 @@ try {
   if ([WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini remains visible after returning to main'}
   Write-Output "PASS: Main mode hides Mini window (cycle $cycle)"
  }
+
+ # Exercise real process redirection in normal, Mini and resident-hidden states.
+ function Test-Reactivation {
+  $second=Start-Process -FilePath (Resolve-Path $Executable) -PassThru
+  try {
+   if(!$second.WaitForExit(10000)){throw 'A second application process remained running'}
+   if($second.ExitCode -ne 0){throw "Secondary launch failed: $($second.ExitCode)"}
+   Start-Sleep -Milliseconds 700
+   if(![WindowProbe]::IsWindowVisible($mainHandle)){throw 'Secondary launch did not restore the existing main window'}
+   $app.Refresh();if($app.HasExited){throw 'Primary instance exited during reactivation'}
+  } finally {$second.Refresh();if(!$second.HasExited){Stop-Process -Id $second.Id -Force}}
+ }
+ Test-Reactivation
+ Write-Output 'PASS: second launch exits and restores the existing main window'
+ Invoke-Button $main 'SwitchToMini'
+ Test-Reactivation
+ if([WindowProbe]::IsWindowVisible($miniHandle)){throw 'Mini remained visible after secondary launch restored main'}
+ Write-Output 'PASS: second launch restores main from Mini without creating another instance'
+ $residentCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ResidentHome')
+ $resident=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$residentCondition).GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+ $residentWasOn=$resident.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On
+ if(!$residentWasOn){$resident.Toggle();Start-Sleep -Milliseconds 300}
+ $main.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+ Start-Sleep -Milliseconds 300
+ if([WindowProbe]::IsWindowVisible($mainHandle)){throw 'Resident close did not hide main'}
+ Test-Reactivation
+ if(!$residentWasOn){$resident.Toggle()}
+ Write-Output 'PASS: second launch restores the resident-hidden primary window'
+ $networkCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenNetwork')
+ $network=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$networkCondition)
+ $network.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Milliseconds 500
+ Invoke-Button $main 'RefreshNetwork'
+ $adapterCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'NetworkAdapters')
+ $adapterValue=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$adapterCondition).GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+ if($adapterValue.Length -lt 20 -or $adapterValue.StartsWith([string][char]0x70B9)){throw 'Network adapter inspection did not update the native UI'}
+ Capture-Window $mainHandle 'network'
+ Write-Output 'PASS: native network page displays adapter information without resetting networking'
+ $homeElement.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Milliseconds 500
+
  # Verify a worker scan does not lock window-mode navigation.
  $scanCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ScanProcessHome')
  $scanButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$scanCondition)
