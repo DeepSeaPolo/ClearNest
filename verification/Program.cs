@@ -153,3 +153,17 @@ Check(adapterReport.Length>0,"network adapter inspection produces a report witho
 try{await NetworkService.RepairAsync((NetworkRepair)999,CancellationToken.None);throw new Exception("Invalid repair accepted");}
 catch(ArgumentOutOfRangeException){Console.WriteLine("PASS: invalid repair operation rejected without running system commands");}
 Console.WriteLine("Network checks did not clear DNS or reset any system networking.");
+
+var timeline=new MemoryTimeline();
+var chartTime=DateTimeOffset.UtcNow;
+timeline.Record(1000,250,chartTime);
+Check(timeline.Current!.Value.Percent==75&&timeline.Current.Value.Used==750,"memory percentage and displayed capacity use the same physical sample");
+timeline.Record(1000,500,chartTime.AddMilliseconds(200));
+Check(timeline.Samples.Count==1&&timeline.Current!.Value.Percent==50&&timeline.Samples[^1].Percent==50,"immediate memory refresh updates the last chart point instead of leaving stale data");
+Check(MemoryTimeline.PlotY(0,100)==100&&MemoryTimeline.PlotY(50,100)==50&&MemoryTimeline.PlotY(100,100)==0,"chart uses a fixed 0–100 percent axis rather than amplifying small fluctuations");
+timeline.Record(1000,750,chartTime.AddSeconds(2));
+Check(timeline.Samples.Count==2&&timeline.Peak==50,"memory chart peak is derived from real retained samples");
+for(int i=1;i<=400;i++)timeline.Record(1000,500,chartTime.AddSeconds(i*2+2));
+Check(timeline.Samples.Count<=180&&timeline.Samples.All(x=>timeline.Current!.Value.Time-x.Time<=MemoryTimeline.Window),"memory history is bounded in size and time");
+try{timeline.Record(100,101,chartTime);throw new Exception("Invalid memory sample accepted");}
+catch(ArgumentOutOfRangeException){Console.WriteLine("PASS: invalid physical memory sample rejected");}
