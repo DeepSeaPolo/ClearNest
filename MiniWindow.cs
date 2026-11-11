@@ -1,3 +1,4 @@
+using ClearNest.Services;
 using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -22,9 +23,10 @@ public sealed class MiniWindow : Window
   purge.Click+=(_,_)=>clean();panel.Children.Add(purge);panel.Children.Add(status);
   var layout=new Grid();layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(40)});layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(1,GridUnitType.Star)});
   var titleRegion=new Grid {Background=new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent)};
-  titleRegion.Children.Add(new TextBlock {Text="清巢",HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,FontSize=12});
+  var brand=new StackPanel {Orientation=Orientation.Horizontal,Spacing=6,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
+  brand.Children.Add(new Image {Width=16,Height=16,Source=AppIconService.CreateImage()});brand.Children.Add(new TextBlock {Text="清巢",FontSize=12});titleRegion.Children.Add(brand);
   layout.Children.Add(titleRegion);Grid.SetRow(panel,1);layout.Children.Add(panel);Content=layout;
-  ExtendsContentIntoTitleBar=true;SetTitleBar(titleRegion);
+  ExtendsContentIntoTitleBar=true;SetTitleBar(titleRegion);AppIconService.ApplyTo(this);
   layout.ActualThemeChanged+=(_,_)=>UpdateCaption();
   AppWindow.Resize(new SizeInt32(360,310));
   if(AppWindow.Presenter is OverlappedPresenter presenter) {presenter.IsAlwaysOnTop=true;presenter.IsResizable=false;presenter.IsMaximizable=false;}

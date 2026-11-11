@@ -18,7 +18,7 @@ public sealed partial class MainWindow : Window
  public MainWindow()
  {
   InitializeComponent();Title="ClearNest · 清巢";AppWindow.Resize(new SizeInt32(1120,880));
-  ExtendsContentIntoTitleBar=true;SetTitleBar(TitleRegion);
+  ExtendsContentIntoTitleBar=true;SetTitleBar(TitleRegion);AppIconService.ApplyTo(this);TitleAppIcon.Source=AppIconService.CreateImage();
   Root.ActualThemeChanged+=(_,_)=>UpdateCaption();
   try{preferences=Preferences.Load();}catch(Exception){Message("无法读取设置，已使用默认外观。");}
   ThemeSystem.IsChecked=preferences.Theme=="System";ThemeLight.IsChecked=preferences.Theme=="Light";ThemeDark.IsChecked=preferences.Theme=="Dark";

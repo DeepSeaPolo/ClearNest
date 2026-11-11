@@ -53,7 +53,7 @@ public sealed class TrayService : IDisposable
   if(RegisterClassEx(ref definition)==0)throw new Win32Exception(Marshal.GetLastWin32Error());
   window=CreateWindowEx(0x80,className,"ClearNest Tray",0,0,0,0,0,IntPtr.Zero,IntPtr.Zero,instance,IntPtr.Zero);
   if(window==IntPtr.Zero){UnregisterClass(className,instance);throw new Win32Exception(Marshal.GetLastWin32Error());}
-  data=new NotifyIconData {Size=(uint)Marshal.SizeOf<NotifyIconData>(),Window=window,Id=1,Flags=7,CallbackMessage=Callback,Icon=LoadIcon(IntPtr.Zero,new IntPtr(32512)),Tip="ClearNest · 清巢",Info="",InfoTitle=""};
+  data=new NotifyIconData {Size=(uint)Marshal.SizeOf<NotifyIconData>(),Window=window,Id=1,Flags=7,CallbackMessage=Callback,Icon=AppIconService.SmallIcon,Tip="ClearNest · 清巢",Info="",InfoTitle=""};
   taskbarCreated=RegisterWindowMessage("TaskbarCreated");
   if(!Shell_NotifyIcon(0,ref data)){Dispose();throw new InvalidOperationException("无法创建托盘图标。");}
  }

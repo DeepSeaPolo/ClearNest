@@ -1,3 +1,4 @@
+param([string]$Executable="publish/isolated/ClearNest.exe")
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -27,7 +28,7 @@ function Find-Window($processId, $title) {
    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$processId)),
    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $title))
  )
- for ($attempt=0; $attempt -lt 30; $attempt++) {
+ for ($attempt=0; $attempt -lt 60; $attempt++) {
   $element = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,$condition)
   if ($null -ne $element) {return $element}
   Start-Sleep -Milliseconds 500
@@ -42,7 +43,7 @@ function Invoke-Button($root, $automationId) {
  $pattern.Invoke()
  Start-Sleep -Seconds 1
 }
-$app = Start-Process -FilePath (Resolve-Path 'publish/portable/ClearNest.exe') -PassThru
+$app = Start-Process -FilePath (Resolve-Path $Executable) -PassThru
 try {
  $main = Find-Window $app.Id ('ClearNest '+[char]0xB7+' '+[char]0x6E05+[char]0x5DE2)
  $mainHandle = [IntPtr]$main.Current.NativeWindowHandle
