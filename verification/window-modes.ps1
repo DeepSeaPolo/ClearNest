@@ -35,6 +35,21 @@ function Find-Window($processId, $title) {
  }
  throw "Window did not appear: $title"
 }
+function Assert-MemoryCard($root) {
+ $percentCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'MemoryUsageValue')
+ $capacityCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'MemoryCapacityValue')
+ $percentText=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$percentCondition).Current.Name
+ $capacityText=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$capacityCondition).Current.Name
+ if(!$percentText -or !$capacityText){throw "Visible memory card fields unavailable: percent=[$percentText], capacity=[$capacityText]"}
+ $values=[regex]::Matches($capacityText,'([0-9]+(?:[.,][0-9]+)?) GB')
+ if($values.Count -ne 3 -or !$percentText.EndsWith('%')){throw "Memory card format invalid: $percentText / $capacityText"}
+ $used=[double]::Parse($values[0].Groups[1].Value.Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ $total=[double]::Parse($values[1].Groups[1].Value.Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ $available=[double]::Parse($values[2].Groups[1].Value.Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ $percent=[double]::Parse($percentText.TrimEnd('%').Replace(',','.'),[System.Globalization.CultureInfo]::InvariantCulture)
+ if($total -le 0 -or [Math]::Abs($used+$available-$total) -gt 0.021 -or [Math]::Abs($used*100/$total-$percent) -gt 0.3){throw "Displayed percent does not match displayed physical capacity: $percentText / $capacityText"}
+ Write-Output "PASS: visible memory percentage matches used/total/available capacity: $percentText"
+}
 function Invoke-Button($root, $automationId) {
  $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$automationId)
  $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
@@ -84,6 +99,7 @@ try {
   Write-Output 'PASS: interval automation opt-in is persisted; no reclamation invoked during test'
  }
 
+ Assert-MemoryCard $main
  for ($cycle=0; $cycle -lt 3; $cycle++) {
   Invoke-Button $main 'SwitchToMini'
   $mini = Find-Window $app.Id 'ClearNest Mini'
@@ -93,24 +109,15 @@ try {
   Write-Output "PASS: Mini mode hides main window (cycle $cycle)"
   if ($cycle -eq 0) {
    Capture-Window $miniHandle 'mini'
-   foreach($field in @('MemoryUsageValue','MemoryCapacityValue')) {
-    $condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$field)
-    $matched=$false
-    for($retry=0;$retry -lt 4;$retry++) {
-     $mainValue=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition).Current.Name
-     $miniValue=$mini.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition).Current.Name
-     if($mainValue -eq $miniValue -and $mainValue.Length -gt 0){$matched=$true;break}
-     Start-Sleep -Milliseconds 100
-    }
-    if(!$matched){throw "Main and Mini memory values disagree: $field"}
-   }
+   Assert-MemoryCard $mini
    $barCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ProgressBar)
    if($null -ne $mini.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$barCondition)){throw 'Mini still contains a memory progress bar'}
-   Write-Output 'PASS: main and Mini share identical memory values and have no Mini progress bar'
+   Write-Output 'PASS: Mini renders the shared memory card without a progress bar'
   }
   Invoke-Button $mini 'ReturnToMain'
   if (![WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window did not return'}
   if ([WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini remains visible after returning to main'}
+  if($cycle -eq 0){Assert-MemoryCard $main}
   Write-Output "PASS: Main mode hides Mini window (cycle $cycle)"
  }
 
