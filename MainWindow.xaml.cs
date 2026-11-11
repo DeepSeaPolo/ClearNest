@@ -14,6 +14,13 @@ public sealed partial class MainWindow : Window
  private readonly TrayService tray;
  private MiniWindow? mini; private bool exiting,busy,miniMode;
  private Preferences preferences=new();
+ private readonly AutoReclaimPolicy autoPolicy=new();
+ private bool autoPaused;
+ private double latestLoad;
+ private static bool IsAdministrator
+ {
+  get{using var identity=System.Security.Principal.WindowsIdentity.GetCurrent();return new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);}
+ }
  private bool initializing=true;
  public MainWindow()
  {
@@ -26,15 +33,18 @@ public sealed partial class MainWindow : Window
   Resident.IsOn=DashboardResident.IsOn=preferences.Resident;MicaChoice.IsOn=preferences.Mica;
   MiniTopChoice.IsOn=preferences.MiniOnTop;StartMiniChoice.IsOn=preferences.StartInMini;
   RefreshChoice.SelectedIndex=Array.IndexOf(new[]{2,5,10},preferences.RefreshSeconds);
-  Navigation.SelectedItem=Navigation.MenuItems[0];initializing=false;ApplyAppearance();
+  AutoInterval.IsOn=preferences.AutoIntervalEnabled;AutoThreshold.IsOn=preferences.AutoThresholdEnabled;
+  AutoMinutes.Value=preferences.AutoIntervalMinutes;AutoPercent.Value=preferences.AutoThresholdPercent;
+  autoPolicy.Configure(preferences,DateTimeOffset.UtcNow);
+  Navigation.SelectedItem=Navigation.MenuItems[0];initializing=false;ApplyAppearance();UpdateAutoState();
   tray=new TrayService(ShowMain,ShowMini,Exit);
   AppWindow.Closing+=(_,args)=>{if(!exiting&&(busy||Resident.IsOn)){args.Cancel=true;if(!busy)AppWindow.Hide();else Message("正在操作，请等待完成后关闭。");}};
   Closed+=(_,_)=>{exiting=true;timer.Stop();tray.Dispose();mini?.Close();Microsoft.UI.Xaml.Application.Current.Exit();};
-  timer.Interval=TimeSpan.FromSeconds(preferences.RefreshSeconds);timer.Tick+=(_,_)=>Refresh();timer.Start();Refresh();
+  timer.Interval=TimeSpan.FromSeconds(preferences.RefreshSeconds);timer.Tick+=(_,_)=>Refresh();timer.Start();Refresh(false);
  }
- private void Refresh()
+ private void Refresh(bool checkAutomatic=true)
  {
-  try{var m=MemoryService.Read();MemoryPercent.Text=$"{m.Load}%";AvailableText.Text=MemoryService.Size(m.Available);MemoryText.Text=$"总内存 {MemoryService.Size(m.Total)} · 每 {preferences.RefreshSeconds} 秒更新";MemoryBar.Value=m.Load;mini?.Update(m.Load,MemoryService.Size(m.Available));}
+  try{var m=MemoryService.Read();latestLoad=100d*(m.Total-m.Available)/m.Total;MemoryUsedValue.Text=MemoryService.Size(m.Total-m.Available);MemoryTrend.Sample(latestLoad);UsedLegend.Text=$"使用中 {MemoryService.Size(m.Total-m.Available)}";MemoryPercent.Text=$"{m.Load}% 占用";AvailableText.Text="可用 "+MemoryService.Size(m.Available);MemoryText.Text=$"总内存 {MemoryService.Size(m.Total)} · 每 {preferences.RefreshSeconds} 秒更新";MemoryBar.Value=m.Load;mini?.Update(m.Load,MemoryService.Size(m.Available));if(checkAutomatic)_=TryAutomaticAsync();}
   catch(Exception e){Message(e.Message,true);}
  }
  private void Message(string text,bool error=false){mini?.Report(text,error);Status.Message=text;Status.Severity=error?InfoBarSeverity.Error:InfoBarSeverity.Informational;}
@@ -120,6 +130,34 @@ public sealed partial class MainWindow : Window
   if(RefreshChoice.SelectedItem is ComboBoxItem item)preferences.RefreshSeconds=int.Parse((string)item.Tag);
   timer.Interval=TimeSpan.FromSeconds(preferences.RefreshSeconds);ApplyAppearance();PersistPreferences();Refresh();
  }
+ private void Automation_Toggled(object sender,RoutedEventArgs e)=>SaveAutomation();
+ private void AutomationNumber_Changed(NumberBox sender,NumberBoxValueChangedEventArgs args)=>SaveAutomation();
+ private void SaveAutomation()
+ {
+  if(initializing)return;
+  if(!IsAdministrator&&(AutoInterval.IsOn||AutoThreshold.IsOn))
+  {
+   initializing=true;AutoInterval.IsOn=false;AutoThreshold.IsOn=false;initializing=false;
+   Message("请以管理员身份启动后开启自动回收；不会自动弹出提权请求。",true);
+  }
+  preferences.AutoIntervalEnabled=AutoInterval.IsOn;preferences.AutoThresholdEnabled=AutoThreshold.IsOn;
+  if(double.IsFinite(AutoMinutes.Value))preferences.AutoIntervalMinutes=(int)Math.Clamp(AutoMinutes.Value,5,1440);
+  if(double.IsFinite(AutoPercent.Value))preferences.AutoThresholdPercent=(int)Math.Clamp(AutoPercent.Value,1,99);
+  autoPaused=false;autoPolicy.Configure(preferences,DateTimeOffset.UtcNow);PersistPreferences();UpdateAutoState();
+ }
+ private void UpdateAutoState()
+ {
+  AutoStateText.Text=autoPaused?"自动回收已暂停，请检查下方错误后重新开启。":!IsAdministrator?"需要管理员权限；非管理员启动时自动回收暂停。":preferences.AutoIntervalEnabled||preferences.AutoThresholdEnabled?"已启用 · 在程序运行期间按设置回收待机缓存。":"默认关闭 · 开启后按设置自动执行。";
+ }
+ private async Task TryAutomaticAsync()
+ {
+  if(busy||autoPaused||!IsAdministrator)return;
+  var reason=autoPolicy.GetDue(preferences,DateTimeOffset.UtcNow,latestLoad);if(reason==null)return;
+  busy=true;
+  try{Message("正在自动回收待机缓存…");await Task.Run(MemoryService.PurgeStandby);Message("已自动回收待机缓存 · "+reason);}
+  catch(Exception ex){autoPaused=true;Message("自动回收已暂停："+ex.Message,true);}
+  finally{busy=false;UpdateAutoState();}
+ }
  private void ShowMain()
  {
   if(busy&&miniMode)return;
@@ -150,7 +188,7 @@ public sealed partial class MainWindow : Window
  private async void Memory_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
   if(!await Confirm("回收待机缓存","仅清空已经离开工作集的未修改待机页，不触碰正在使用的进程工作集。待机缓存本就可用，清空后可能出现重新读取磁盘的开销。继续？"))return;
-  await Task.Run(MemoryService.PurgeStandby);Message("已提交待机缓存回收。可用内存可能没有明显变化，未将波动计为释放成果。");
+  autoPolicy.RecordAttempt(preferences,DateTimeOffset.UtcNow,latestLoad);await Task.Run(MemoryService.PurgeStandby);Message("已提交待机缓存回收。可用内存可能没有明显变化，未将波动计为释放成果。");
  });
  private async void Processes_Click(object sender,RoutedEventArgs e)=>await Run(async()=>{Message("正在采样进程…");var rows=await ProcessService.Scan();Processes.ItemsSource=rows;ProcessSummary.Text=rows.Count==0?"未读取到可访问进程。":string.Join(" · ",rows.Take(3).Select(x=>$"{x.Name} {x.Bytes/1048576d:F0} MB"));Message("进程列表已更新；没有自动结束任何进程。");});
  private void TaskManager_Click(object sender,RoutedEventArgs e){try{Process.Start(new ProcessStartInfo("taskmgr.exe"){UseShellExecute=true});}catch(Exception ex){Message(ex.Message,true);}}

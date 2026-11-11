@@ -80,3 +80,17 @@ finally
 {
  if(previousPreferences==null)File.Delete(Preferences.FilePath);else File.WriteAllBytes(Preferences.FilePath,previousPreferences);
 }
+
+var autoPreferences=new Preferences {AutoIntervalEnabled=true,AutoIntervalMinutes=15};
+var policy=new AutoReclaimPolicy();var start=DateTimeOffset.UtcNow;policy.Configure(autoPreferences,start);
+Check(policy.GetDue(autoPreferences,start.AddMinutes(14),40)==null,"scheduled cleanup waits for its interval");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(15),40)!=null,"scheduled cleanup becomes due without catch-up bursts");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(16),40)==null,"automatic cleanup respects the cooldown");
+autoPreferences.AutoIntervalEnabled=false;autoPreferences.AutoThresholdEnabled=true;autoPreferences.AutoThresholdPercent=85;
+policy.Configure(autoPreferences,start.AddMinutes(20));
+Check(policy.GetDue(autoPreferences,start.AddMinutes(20),90)!=null,"high memory usage triggers threshold policy");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(30),90)==null,"sustained high usage does not repeatedly reclaim");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(31),79)==null,"threshold policy rearms after occupancy falls");
+Check(policy.GetDue(autoPreferences,start.AddMinutes(32),86)!=null,"threshold policy can trigger after recovery and a new rise");
+autoPreferences.AutoThresholdEnabled=false;
+Check(policy.GetDue(autoPreferences,start.AddHours(2),99)==null,"disabled automatic policies never trigger");

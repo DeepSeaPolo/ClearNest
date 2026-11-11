@@ -71,6 +71,19 @@ try {
  $homeElement.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
  Start-Sleep -Seconds 1
  Capture-Window $mainHandle 'dashboard-dark' 
+ $identity=[System.Security.Principal.WindowsIdentity]::GetCurrent()
+ try {$admin=(New-Object System.Security.Principal.WindowsPrincipal($identity)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)} finally {$identity.Dispose()}
+ if ($admin) {
+  $autoCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'AutoIntervalToggle')
+  $autoToggle=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$autoCondition)
+  $autoToggle.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+  Start-Sleep -Seconds 1
+  $autoPreferences=Get-Content "$env:LOCALAPPDATA/ClearNest/preferences.json" -Raw | ConvertFrom-Json
+  if (!$autoPreferences.AutoIntervalEnabled) {throw 'Automatic interval setting was not saved'}
+  $autoToggle.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+  Write-Output 'PASS: interval automation opt-in is persisted; no reclamation invoked during test'
+ }
+
  for ($cycle=0; $cycle -lt 3; $cycle++) {
   Invoke-Button $main 'SwitchToMini'
   $mini = Find-Window $app.Id 'ClearNest Mini'

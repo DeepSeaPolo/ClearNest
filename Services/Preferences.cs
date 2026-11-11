@@ -11,6 +11,10 @@ public sealed class Preferences
  public bool MiniOnTop {get;set;}=true;
  public bool StartInMini {get;set;}
  public int RefreshSeconds {get;set;}=5;
+ public bool AutoIntervalEnabled {get;set;}
+ public int AutoIntervalMinutes {get;set;}=15;
+ public bool AutoThresholdEnabled {get;set;}
+ public int AutoThresholdPercent {get;set;}=85;
  public static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClearNest","preferences.json");
  public static Preferences Load()
  {
@@ -23,6 +27,8 @@ public sealed class Preferences
   if(result.Theme is not ("System" or "Light" or "Dark"))result.Theme="System";
   if(result.Accent is not ("Indigo" or "Purple" or "Teal" or "Rose" or "Amber"))result.Accent="Indigo";
   if(result.RefreshSeconds is not (2 or 5 or 10))result.RefreshSeconds=5;
+  if(result.AutoIntervalMinutes<5||result.AutoIntervalMinutes>1440)result.AutoIntervalMinutes=15;
+  if(result.AutoThresholdPercent<1||result.AutoThresholdPercent>99)result.AutoThresholdPercent=85;
   return result;
  }
  public void Save()
