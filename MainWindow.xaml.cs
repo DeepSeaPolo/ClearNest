@@ -72,10 +72,10 @@ public sealed partial class MainWindow : Window
   bool medium=e.NewSize.Width<940;
   Grid.SetColumn(AvailableCard,narrow?0:1);Grid.SetRow(AvailableCard,narrow?1:0);
   Grid.SetColumnSpan(AvailableCard,narrow?2:1);
-  Grid.SetColumnSpan((UIElement)MemoryCards.Children[0],narrow?2:1);
+  Grid.SetColumnSpan((FrameworkElement)MemoryCards.Children[0],narrow?2:1);
   ActionCards.ColumnDefinitions[2].Width=medium?new GridLength(0):new GridLength(1,GridUnitType.Star);
   Grid.SetColumn(RegistryCard,narrow?0:1);Grid.SetRow(RegistryCard,narrow?1:0);Grid.SetColumnSpan(RegistryCard,narrow?2:1);
-  Grid.SetColumnSpan((UIElement)ActionCards.Children[0],narrow?2:1);
+  Grid.SetColumnSpan((FrameworkElement)ActionCards.Children[0],narrow?2:1);
   Grid.SetRow(ProcessCard,narrow?2:medium?1:0);Grid.SetColumn(ProcessCard,medium?0:2);Grid.SetColumnSpan(ProcessCard,medium?2:1);
  }
  public void ApplyStartupMode(){if(preferences.StartInMini)ShowMini();}

@@ -46,6 +46,11 @@ $app = Start-Process -FilePath (Resolve-Path 'publish/portable/ClearNest.exe') -
 try {
  $main = Find-Window $app.Id ('ClearNest '+[char]0xB7+' '+[char]0x6E05+[char]0x5DE2)
  $mainHandle = [IntPtr]$main.Current.NativeWindowHandle
+ $screen=[System.Windows.Automation.AutomationElement]::RootElement.Current.BoundingRectangle
+ if ($main.Current.BoundingRectangle.Width -gt $screen.Width -or $main.Current.BoundingRectangle.Height -gt $screen.Height) {
+  $main.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Maximized)
+  Start-Sleep -Seconds 1
+ }
  Start-Sleep -Seconds 2
  Capture-Window $mainHandle 'main'
  $navCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenSettings')
