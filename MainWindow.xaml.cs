@@ -244,7 +244,7 @@ public sealed partial class MainWindow : Window
  private async void Diagnostics_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {
   OperationText.Text="读取提交量与系统性能计数器…";var report=await Task.Run(MemoryDiagnostics.Read);CurrentToken.ThrowIfCancellationRequested();
-  var dialog=new ContentDialog {Title="内存与提交压力诊断",Content=new ScrollViewer {Content=new TextBlock {Text=report.Describe(),TextWrapping=TextWrapping.Wrap},MaxHeight=440},PrimaryButtonText="系统虚拟内存设置",CloseButtonText="关闭",XamlRoot=(miniMode&&mini!=null?mini.Content:Content).XamlRoot};
+  var dialog=new ContentDialog {Title="内存与提交压力诊断",Content=new ScrollViewer {HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Content=new TextBlock {Text=report.Describe(),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,24,0)},MaxHeight=440},PrimaryButtonText="系统虚拟内存设置",CloseButtonText="关闭",XamlRoot=(miniMode&&mini!=null?mini.Content:Content).XamlRoot};
   dialogOpen=true;activeDialog=dialog;try{if(await dialog.ShowAsync()==ContentDialogResult.Primary)OpenSystem("SystemPropertiesAdvanced.exe");}finally{dialogOpen=false;activeDialog=null;}
  });
  private void OpenSystem(string name)
