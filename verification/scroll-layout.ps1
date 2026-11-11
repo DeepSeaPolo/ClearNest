@@ -46,7 +46,8 @@ function Check-PageScroll([string]$navigation,[string]$scrollerId,[string]$lastI
  if($pattern.Current.HorizontallyScrollable){throw "Unexpected horizontal page scrolling: $name"}
  $pattern.SetScrollPercent(-1,0)
  $bounds=$scroller.Current.BoundingRectangle
- [void][ScrollPointer]::SetCursorPos([int]($bounds.Right-6),[int]($bounds.Top+40))
+ $hoverBar=Vertical-Bar $scroller
+ if($null -ne $hoverBar){$hover=$hoverBar.Current.BoundingRectangle;[void][ScrollPointer]::SetCursorPos([int]($hover.Left+$hover.Width/2),[int]($hover.Top+40))}
  Start-Sleep -Milliseconds 600
  Check-VisibleActions ($name+'-top')
  Capture-Window $Handle ($name+'-top')
