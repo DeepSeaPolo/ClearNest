@@ -91,7 +91,23 @@ try {
   if ([WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window remains visible in Mini mode'}
   if (![WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini window is hidden in Mini mode'}
   Write-Output "PASS: Mini mode hides main window (cycle $cycle)"
-  if ($cycle -eq 0) {Capture-Window $miniHandle 'mini'}
+  if ($cycle -eq 0) {
+   Capture-Window $miniHandle 'mini'
+   foreach($field in @('MemoryUsageValue','MemoryCapacityValue')) {
+    $condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,$field)
+    $matched=$false
+    for($retry=0;$retry -lt 4;$retry++) {
+     $mainValue=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition).Current.Name
+     $miniValue=$mini.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition).Current.Name
+     if($mainValue -eq $miniValue -and $mainValue.Length -gt 0){$matched=$true;break}
+     Start-Sleep -Milliseconds 100
+    }
+    if(!$matched){throw "Main and Mini memory values disagree: $field"}
+   }
+   $barCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::ProgressBar)
+   if($null -ne $mini.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$barCondition)){throw 'Mini still contains a memory progress bar'}
+   Write-Output 'PASS: main and Mini share identical memory values and have no Mini progress bar'
+  }
   Invoke-Button $mini 'ReturnToMain'
   if (![WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window did not return'}
   if ([WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini remains visible after returning to main'}
