@@ -66,12 +66,17 @@ function Check-PageScroll([string]$navigation,[string]$scrollerId,[string]$lastI
 }
 function Check-VisibleActions([string]$name) {
  $bounds=$Main.Current.BoundingRectangle
- $buttons=$Main.FindAll([System.Windows.Automation.TreeScope]::Descendants,(New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)))
+ $actionCondition=New-Object System.Windows.Automation.OrCondition(
+  (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)),
+  (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::RadioButton))
+ )
+ $buttons=$Main.FindAll([System.Windows.Automation.TreeScope]::Descendants,$actionCondition)
  foreach($button in $buttons) {
   if($button.Current.IsOffscreen){continue}
   $rect=$button.Current.BoundingRectangle
   if($rect.Top -lt $bounds.Top+44 -or $rect.Width -le 0){continue}
   if($rect.Right -gt $bounds.Right-20){throw "Visible action is clipped at the window edge: $name / $($button.Current.Name)"}
+  if($button.Current.ControlType -eq [System.Windows.Automation.ControlType]::RadioButton -and $rect.Width -lt 32+14*$button.Current.Name.Length){throw "Theme option label is clipped: $($button.Current.Name)"}
  }
 }
 $window=$Main.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern)
