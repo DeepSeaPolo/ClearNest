@@ -2,7 +2,15 @@
 
 已通过 GitHub Actions Windows 编译、GUI 主窗口启动检查和 10 项核心清理保护测试。这是首版便携工具，尚未完成 Windows 11 全功能人工验收；内存回收 Native API 和托盘/迷你窗口交互仍需用户实机验证。
 
-[直接下载 Windows 运行包](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.1.0/ClearNest-Win11-x64.zip) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.1.0)。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
+[直接下载 Windows 运行包](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.1.1/ClearNest-Win11-x64-v0.1.1.zip) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.1.1)。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
+
+## v0.1.1 窗口与界面更新
+
+- 使用原生 WinUI 3 NavigationView 侧栏、系统主题卡片和强调色按钮；没有使用 WebView、HTML 或 Electron 界面。
+- 切换 Mini 时隐藏主窗口，返回主窗口时隐藏 Mini，同时只显示一个窗口。
+- Mini 内回收内存的确认框和结果提示保留在 Mini 内。
+- 关闭 Mini：常驻关闭时返回主窗口；常驻开启时隐藏至托盘。
+- Windows 自动验证反复切换三次，检查两个原生 HWND 的可见状态。
 
 ## 构建与运行
 
