@@ -69,7 +69,7 @@ public sealed partial class MainWindow : Window
  {
   if(RegistryCard==null)return;
   bool narrow=e.NewSize.Width<640;
-  bool medium=e.NewSize.Width<940;
+  bool medium=e.NewSize.Width<820;
   Grid.SetColumn(AvailableCard,narrow?0:1);Grid.SetRow(AvailableCard,narrow?1:0);
   Grid.SetColumnSpan(AvailableCard,narrow?2:1);
   Grid.SetColumnSpan((FrameworkElement)MemoryCards.Children[0],narrow?2:1);
@@ -81,12 +81,15 @@ public sealed partial class MainWindow : Window
  public void ApplyStartupMode(){if(preferences.StartInMini)ShowMini();}
  private void PersistPreferences(){try{preferences.Save();}catch(Exception ex){Message("设置未能保存："+ex.Message,true);}}
  private ElementTheme PreferredTheme => preferences.Theme switch {"Dark"=>ElementTheme.Dark,"Light"=>ElementTheme.Light,_=>ElementTheme.Default};
+ private static readonly string[] AccentResourceKeys={"AccentFillColorDefaultBrush","AccentFillColorSecondaryBrush","AccentFillColorTertiaryBrush","ToggleSwitchFillOn","ToggleSwitchFillOnPointerOver","ToggleSwitchFillOnPressed","RadioButtonOuterEllipseFillChecked","RadioButtonOuterEllipseFillCheckedPointerOver","RadioButtonOuterEllipseFillCheckedPressed","NavigationViewSelectionIndicatorForeground"};
  private void ApplyAppearance()
  {
   Root.RequestedTheme=PreferredTheme;
   var hex=preferences.Accent switch {"Purple"=>0x7C3AEDu,"Teal"=>0x007D76u,"Rose"=>0xB82F61u,"Amber"=>0xA65C00u,_=>0x4F6BEDu};
   var brush=(Microsoft.UI.Xaml.Media.SolidColorBrush)Microsoft.UI.Xaml.Application.Current.Resources["AppAccentBrush"];
   brush.Color=Windows.UI.Color.FromArgb(255,(byte)(hex>>16),(byte)(hex>>8),(byte)hex);
+  foreach(var key in AccentResourceKeys)
+   ((Microsoft.UI.Xaml.Media.SolidColorBrush)Microsoft.UI.Xaml.Application.Current.Resources[key]).Color=brush.Color;
   SystemBackdrop=preferences.Mica?new Microsoft.UI.Xaml.Media.MicaBackdrop():null;
   mini?.ApplyAppearance(PreferredTheme,preferences.Mica,preferences.MiniOnTop);
   UpdateCaption();
