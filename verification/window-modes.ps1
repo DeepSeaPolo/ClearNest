@@ -66,8 +66,8 @@ try {
  Write-Output 'PASS: dark theme selected and persisted through native UI'
  Capture-Window $mainHandle 'settings-dark'
  $homeCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenHome')
- $home=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$homeCondition)
- $home.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ $homeElement=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$homeCondition)
+ $homeElement.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
  Start-Sleep -Seconds 1
  Capture-Window $mainHandle 'dashboard-dark' 
  for ($cycle=0; $cycle -lt 3; $cycle++) {

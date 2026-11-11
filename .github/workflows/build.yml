@@ -40,10 +40,11 @@ jobs:
             publish/SHA256.txt
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ClearNest-ui-preview
           path: publish/ui-checks/
-          if-no-files-found: error
+          if-no-files-found: warn
       - name: Publish v0.2.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
