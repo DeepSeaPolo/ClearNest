@@ -2,7 +2,16 @@
 
 已通过 GitHub Actions Windows 编译、GUI 主窗口启动检查和 10 项核心清理保护测试。这是首版便携工具，尚未完成 Windows 11 全功能人工验收；内存回收 Native API 和托盘/迷你窗口交互仍需用户实机验证。
 
-[直接下载 Windows 运行包](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.1.1/ClearNest-Win11-x64-v0.1.1.zip) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.1.1)。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
+[直接下载 Windows 运行包](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.2.0/ClearNest-Win11-x64-v0.2.0.zip) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.2.0)。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
+
+## v0.2.0 仪表盘与主题
+
+- 借鉴 FlClash 的卡片化与信息集中方式，使用独立编写的原生 WinUI 3 实现。
+- 首页平铺内存、临时文件、注册表启动项、进程摘要和后台常驻开关；扫描只更新摘要，详细候选列表按需打开。
+- 页面按宽度调整为三列、两列或单列，较小窗口可纵向滚动。
+- 主题支持跟随系统、浅色、深色，提供鸢尾蓝、紫罗兰、青绿、玫瑰和琥珀强调色，以及云母/纯色背景。
+- 主题与 Mini 置顶、启动时进入 Mini、后台常驻、2/5/10 秒刷新间隔自动保存到本机 preferences.json。
+- 主窗口与 Mini 使用居中标题区域，保留原生拖动和系统窗口按钮；Mini 继续与主窗口互斥。
 
 ## v0.1.1 窗口与界面更新
 
@@ -83,4 +92,4 @@ https://learn.microsoft.com/en-us/windows/win32/memory/working-set
 - 恢复跳过现有同名值。
 - 自包含发布生成 Windows PE EXE；GUI 主窗口成功出现，启动 12 秒内未退出。
 
-构建对应源码提交：`c000ad7d016b4c6f2f2514b3b4d5dffd590e8464`。本次文档更新未改变程序代码。
+各版本源码以对应发布标签为准；自动测试记录位于 Actions。完整 Windows 11 人工验收清单仍适用。
