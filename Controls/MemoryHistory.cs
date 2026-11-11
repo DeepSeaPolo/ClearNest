@@ -15,7 +15,7 @@ public sealed class MemoryHistory : Canvas
  private readonly TextBlock hint=new() {Text="正在采集实时趋势…",FontSize=11,Opacity=0.5};
  public MemoryHistory()
  {
-  Height=56;IsHitTestVisible=true;
+  Height=48;IsHitTestVisible=true;
   var brush=(SolidColorBrush)Microsoft.UI.Xaml.Application.Current.Resources["AppAccentBrush"];
   area.Fill=brush;line.Stroke=brush;Children.Add(area);Children.Add(line);Children.Add(hint);
   SizeChanged+=(_,_)=>Draw();
@@ -34,7 +34,7 @@ public sealed class MemoryHistory : Canvas
   hint.Visibility=samples.Count<2?Visibility.Visible:Visibility.Collapsed;
   if(samples.Count<2||width<2||height<2)return;
   // A limited adaptive range makes genuine small variations visible; no synthetic history.
-  var min=Math.Max(0,samples.Min(x=>x.Load)-4);var max=Math.Min(100,samples.Max(x=>x.Load)+4);
+  var min=Math.Max(0,samples.Min(x=>x.Load)-0.5);var max=Math.Min(100,samples.Max(x=>x.Load)+0.5);
   var duration=Math.Max(0.001,(samples[^1].Time-samples[0].Time).TotalSeconds);
   var points=samples.Select(x=>new Point((x.Time-samples[0].Time).TotalSeconds/duration*width,height-(x.Load-min)/Math.Max(1,max-min)*(height-4)-2)).ToArray();
   PathGeometry Make(bool filled)
