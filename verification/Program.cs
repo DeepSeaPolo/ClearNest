@@ -1,0 +1,68 @@
+using ClearNest.Services;
+using Microsoft.Win32;
+
+static void Check(bool condition,string message)
+{
+    if(!condition) throw new Exception(message);
+    Console.WriteLine("PASS: "+message);
+}
+var folder=Path.Combine(@"C:\Windows\Temp","ClearNest-Test-"+Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(folder);
+DiskRow Make(string name,bool old=true)
+{
+    var file=Path.Combine(folder,name);File.WriteAllText(file,"test fixture");
+    if(old)File.SetLastWriteTimeUtc(file,DateTime.UtcNow.AddDays(-10));
+    var info=new FileInfo(file);return new(file,info.Length,info.LastWriteTimeUtc);
+}
+try
+{
+    var memory=MemoryService.Read();Check(memory.Total>0 && memory.Available<=memory.Total,"memory status is valid (no reclamation invoked)");
+    var old=Make("old.tmp");var result=DiskService.Delete(new[]{old});
+    Check(result.Deleted==1 && !File.Exists(old.Path),"selected old temporary file is deleted");
+    var recent=Make("recent.tmp",false);result=DiskService.Delete(new[]{recent});
+    Check(result.Deleted==0 && File.Exists(recent.Path),"recent file is retained");
+    var changed=Make("changed.tmp");File.AppendAllText(changed.Path,"changed");result=DiskService.Delete(new[]{changed});
+    Check(result.Deleted==0 && File.Exists(changed.Path),"changed file is retained");
+    var locked=Make("locked.tmp");
+    using(var stream=new FileStream(locked.Path,FileMode.Open,FileAccess.Read,FileShare.None))
+    {
+        result=DiskService.Delete(new[]{locked});
+        Check(result.Deleted==0 && File.Exists(locked.Path),"file with active exclusive handle is retained");
+    }
+    var outside=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClearNest-Outside-"+Guid.NewGuid().ToString("N")+".tmp");
+    try
+    {
+        File.WriteAllText(outside,"fixture");File.SetLastWriteTimeUtc(outside,DateTime.UtcNow.AddDays(-10));var info=new FileInfo(outside);
+        result=DiskService.Delete(new[]{new DiskRow(outside,info.Length,info.LastWriteTimeUtc)});
+        Check(result.Deleted==0 && File.Exists(outside),"file outside temporary directory allowlist is retained");
+    }
+    finally{File.Delete(outside);}
+}
+finally {Directory.Delete(folder,true);}
+
+const string keyPath=@"Software\Microsoft\Windows\CurrentVersion\Run";
+var valueName="ClearNest-Test-"+Guid.NewGuid().ToString("N");
+var missingCommand="\"C:\\ClearNestMissing-"+Guid.NewGuid().ToString("N")+"\\missing.exe\"";
+string? backup=null;
+try
+{
+    using(var key=Registry.CurrentUser.CreateSubKey(keyPath,true))key.SetValue(valueName,missingCommand,RegistryValueKind.String);
+    var selected=RegistryService.Scan().Where(x=>x.Name==valueName).ToList();
+    Check(selected.Count==1,"missing quoted executable is a startup candidate");
+    var cleaned=RegistryService.Clean(selected);backup=cleaned.Backup;
+    using(var key=Registry.CurrentUser.OpenSubKey(keyPath))
+        Check(cleaned.Deleted==1 && File.Exists(backup) && key?.GetValue(valueName)==null,"registry value is backed up before removal");
+    var restored=RegistryService.Restore(backup);
+    using(var key=Registry.CurrentUser.OpenSubKey(keyPath))
+        Check(restored.Restored==1 && (string?)key?.GetValue(valueName)==missingCommand,"registry backup restores exact value");
+    using(var key=Registry.CurrentUser.CreateSubKey(keyPath,true))key.SetValue(valueName,"existing value",RegistryValueKind.String);
+    restored=RegistryService.Restore(backup);
+    using(var key=Registry.CurrentUser.OpenSubKey(keyPath))
+        Check(restored.Skipped==1 && (string?)key?.GetValue(valueName)=="existing value","restore does not overwrite existing value");
+}
+finally
+{
+    using(var key=Registry.CurrentUser.OpenSubKey(keyPath,true))key?.DeleteValue(valueName,false);
+    if(backup!=null)File.Delete(backup);
+}
+Console.WriteLine("All cleanup checks passed. Only test fixtures were modified.");
