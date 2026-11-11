@@ -103,6 +103,7 @@ public sealed partial class MainWindow : Window
   DiskPage.Visibility=tag=="disk"?Visibility.Visible:Visibility.Collapsed;
   RegistryPage.Visibility=tag=="registry"?Visibility.Visible:Visibility.Collapsed;
   SettingsPage.Visibility=tag=="settings"?Visibility.Visible:Visibility.Collapsed;
+  NetworkPage.Visibility=tag=="network"?Visibility.Visible:Visibility.Collapsed;
   sender.Header=item.Content;
  }
  private void OpenPage_Click(object sender,RoutedEventArgs e)
@@ -205,6 +206,12 @@ public sealed partial class MainWindow : Window
   try{Message("正在自动回收待机缓存…");await Task.Run(MemoryService.PurgeStandby);Message("已自动回收待机缓存 · "+reason);}
   catch(Exception ex){autoPaused=true;Message("自动回收已暂停："+ex.Message,true);}
   finally{busy=false;UpdateAutoState();if(exitAfterWork)Exit();}
+ }
+ public void ActivateExistingInstance()
+ {
+  if(exiting)return;
+  if(miniMode&&mini!=null&&dialogOpen){mini.AppWindow.Show();mini.Activate();return;}
+  ShowMain();
  }
  private void ShowMain()
  {
@@ -332,6 +339,48 @@ public sealed partial class MainWindow : Window
   if(!await Confirm("恢复启动项","仅使用你信任的 ClearNest 失效项备份。恢复将重新写入启动命令，现有同名值不会覆盖。"))return;
   CurrentToken.ThrowIfCancellationRequested();var r=await Task.Run(()=>RegistryService.Restore(file.Path));Message($"恢复 {r.Restored} 项，跳过 {r.Skipped} 项。");
  });
+
+ private async void NetworkRefresh_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  var token=CurrentToken;OperationText.Text="读取网络适配器…";
+  NetworkAdapters.Text=await Task.Run(()=>NetworkService.ReadAdapters(token));
+  Message("网卡信息已更新；链路速率不是实测下载速度。");
+ });
+ private async void NetworkDiagnose_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  string host=NetworkService.NormalizeHost(NetworkTarget.Text);NetworkResults.Text="";
+  OperationText.Text="正在诊断 DNS、TCP 和 HTTPS…";
+  int id=operationId;
+  var progress=new Progress<NetworkCheck>(row=>{if(id==operationId)NetworkResults.Text+=row.Display+"\n\n";});
+  var token=CurrentToken;
+  await Task.Run(()=>NetworkService.DiagnoseAsync(host,progress,token));
+  Message("诊断完成。TCP 直连与 HTTPS 系统代理路径可能不同；单个站点失败不代表全网故障。");
+ });
+ private async void NetworkRepair_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
+ {
+  if(sender is not Button button||!Enum.TryParse<NetworkRepair>(button.Tag as string,out var repair))return;
+  if(!IsAdministrator){Message("网络修复需要以管理员身份启动 ClearNest。",true);return;}
+  string title=repair switch {NetworkRepair.FlushDns=>"清空 DNS 缓存",NetworkRepair.ResetWinsock=>"重置 Winsock",_=>"重置 TCP/IP"};
+  string explanation=repair switch
+  {
+   NetworkRepair.FlushDns=>"仅清空本机 DNS 解析缓存，不更改 DNS 服务器地址。",
+   NetworkRepair.ResetWinsock=>"将 Windows Winsock 目录恢复为默认状态。可能影响 VPN、代理及网络软件，通常需要重启电脑。",
+   _=>"将 Windows TCP/IP 设置重置为默认状态。可能影响静态 IP、DNS、VPN 和网络连接；请先记录自己的网络配置，通常需要重启电脑。"
+  };
+  explanation+="\n\n执行后不能自动撤销。取消只阻止尚未开始的步骤，不中断已经启动的修复命令。本工具不会自动重启电脑。";
+  if(!await Confirm(title,explanation))return;
+  var token=CurrentToken;OperationText.Text=title+"，等待系统命令完成…";
+  NetworkResults.Text=await Task.Run(()=>NetworkService.RepairAsync(repair,token));
+  Message(title+"已完成，请查看详细结果。");
+ });
+ private void CopyNetwork_Click(object sender,RoutedEventArgs e)
+ {
+  var data=new Windows.ApplicationModel.DataTransfer.DataPackage();
+  data.SetText("ClearNest 网络报告\n"+NetworkAdapters.Text+"\n"+NetworkResults.Text);
+  Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
+  Message("网络报告已复制。报告包含本机网卡和地址信息。");
+ }
+
  private void Resident_Toggled(object sender,RoutedEventArgs e)
  {
   if(initializing||sender is not ToggleSwitch toggle)return;
