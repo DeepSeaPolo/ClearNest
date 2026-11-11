@@ -32,6 +32,7 @@ function Check-PageScroll([string]$navigation,[string]$scrollerId,[string]$lastI
  $bounds=$scroller.Current.BoundingRectangle
  [void][ScrollPointer]::SetCursorPos([int]($bounds.Right-6),[int]($bounds.Top+40))
  Start-Sleep -Milliseconds 600
+ Check-VisibleActions ($name+'-top')
  Capture-Window $Handle ($name+'-top')
  $pattern.SetScrollPercent(-1,100)
  Start-Sleep -Milliseconds 400
@@ -41,9 +42,20 @@ function Check-PageScroll([string]$navigation,[string]$scrollerId,[string]$lastI
  $rect=$last.Current.BoundingRectangle
  if($last.Current.IsOffscreen -or $rect.Bottom -gt $bounds.Bottom+2){throw "Last page action is clipped at end: $name"}
  if($rect.Right -gt $bar.Current.BoundingRectangle.Left-1){throw "Scrollbar overlays last page content: $name"}
+ Check-VisibleActions ($name+'-bottom')
  Capture-Window $Handle ($name+'-bottom')
  $pattern.SetScrollPercent(-1,0)
  Write-Output "PASS: expanded scrollbar stays clear of content and last action remains reachable: $name"
+}
+function Check-VisibleActions([string]$name) {
+ $bounds=$Main.Current.BoundingRectangle
+ $buttons=$Main.FindAll([System.Windows.Automation.TreeScope]::Descendants,(New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)))
+ foreach($button in $buttons) {
+  if($button.Current.IsOffscreen){continue}
+  $rect=$button.Current.BoundingRectangle
+  if($rect.Top -lt $bounds.Top+44 -or $rect.Width -le 0){continue}
+  if($rect.Right -gt $bounds.Right-20){throw "Visible action is clipped at the window edge: $name / $($button.Current.Name)"}
+ }
 }
 $window=$Main.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern)
 $transform=$Main.GetCurrentPattern([System.Windows.Automation.TransformPattern]::Pattern)
@@ -91,6 +103,25 @@ try {
  Check-PageScroll 'OpenHome' 'HomeScroller' 'OpenNetworkHome' 'scroll-home-640'
  Check-PageScroll 'OpenSettings' 'SettingsPageScroller' 'ExitApp' 'scroll-settings-640'
  Check-PageScroll 'OpenNetwork' 'NetworkPageScroller' 'NetworkResults' 'scroll-network-640'
+ foreach($width in @(640,500)) {
+  $transform.Resize($width,700)
+  Start-Sleep -Milliseconds 300
+  foreach($page in @(@('OpenProcesses','process'),@('OpenFiles','files'),@('OpenStartup','startup'))) {
+   Select-Page $page[0]
+   Check-VisibleActions ($page[1]+'-'+$width)
+   Capture-Window $Handle ('audit-'+$page[1]+'-'+$width)
+  }
+ }
+ Check-PageScroll 'OpenHome' 'HomeScroller' 'OpenNetworkHome' 'scroll-home-500'
+ Check-PageScroll 'OpenSettings' 'SettingsPageScroller' 'ExitApp' 'scroll-settings-500'
+ Check-PageScroll 'OpenNetwork' 'NetworkPageScroller' 'NetworkResults' 'scroll-network-500'
+ Select-Page 'OpenSettings'
+ (Element-Id 'ThemeLight').GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Milliseconds 400
+ Check-VisibleActions 'settings-light-500'
+ Capture-Window $Handle 'audit-settings-light-500'
+ (Element-Id 'ThemeDark').GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Write-Output 'PASS: all six pages remain within the small-window bounds, including light and dark settings'
 } finally {
  Select-Page 'OpenHome'
  (Element-Id 'HomeScroller').GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1,0)
