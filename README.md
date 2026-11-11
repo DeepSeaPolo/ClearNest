@@ -2,7 +2,20 @@
 
 已通过 GitHub Actions Windows 编译、GUI 主窗口启动检查和 10 项核心清理保护测试。这是首版便携工具，尚未完成 Windows 11 全功能人工验收；内存回收 Native API 和托盘/迷你窗口交互仍需用户实机验证。
 
-[直接下载 Windows 运行包](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.2.0/ClearNest-Win11-x64-v0.2.0.zip) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.2.0)。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
+[直接下载 Windows 运行包](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.3.0/ClearNest-v0.3.0-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.3.0)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
+
+## v0.3.0 单文件、自动回收与实时趋势
+
+当前功能位于开发分支及 PR #3；尚未获得主分支合并与公开发布的确认。上方正式发布链接将在合并并通过发布检查后生效。
+
+- 官方 .NET/WinUI 自包含单文件发布：一个 EXE 包含运行时、原生依赖、界面和图标。首次启动自动在 bundle 缓存展开依赖，不要求 EXE 旁有依赖目录。设置仍保存到用户配置目录。
+- 构建使用 `./build.ps1 -SingleFile`。检查会将唯一 EXE 复制到空目录，再运行主题和主/Mini 切换测试。
+- 图标改为蓝紫青扁平几何色块，嵌入 EXE、标题栏、任务栏与托盘；启动项导航使用 Windows 11 的 SpeedHigh 仪表盘符号。
+- 内存卡片使用真实物理内存采样，展示使用中容量、占用率、可用容量与淡色面积趋势图。最多保留 120 个样本，纵轴随实际数据调整；没有模拟历史数据。
+- 首页可启用每 5～1440 分钟的自动待机缓存回收，或 1～99% 的占用率阈值；默认均关闭，需要管理员权限。
+- 两次自动回收至少相隔 5 分钟；阈值触发后，需降至阈值以下 5 个百分点才会重新武装。休眠恢复不会补跑多次任务。
+- 自动任务只在应用运行时执行，仅使用待机缓存回收接口，不处理进程工作集、文件或注册表。原生回收失败会暂停自动任务；修改自动设置后可重新启用。
+- 文件和启动项清理仍要求预览、选择和确认。高占用率不保证会因待机缓存回收而下降。
 
 ## v0.2.0 仪表盘与主题
 
