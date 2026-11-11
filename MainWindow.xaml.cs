@@ -12,11 +12,11 @@ public sealed partial class MainWindow : Window
 {
  private readonly DispatcherTimer timer=new();
  private readonly TrayService tray;
- private MiniWindow? mini; private bool exiting,busy;
+ private MiniWindow? mini; private bool exiting,busy,miniMode;
  private readonly string settings=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClearNest","resident.txt");
  public MainWindow()
  {
-  InitializeComponent();Title="ClearNest · 清巢";SystemBackdrop=new Microsoft.UI.Xaml.Media.MicaBackdrop();AppWindow.Resize(new SizeInt32(960,760));
+  InitializeComponent();Title="ClearNest · 清巢";SystemBackdrop=new Microsoft.UI.Xaml.Media.MicaBackdrop();AppWindow.Resize(new SizeInt32(1100,820));Navigation.SelectedItem=Navigation.MenuItems[0];
   tray=new TrayService(ShowMain,ShowMini,Exit);
   try{Resident.IsOn=File.Exists(settings)&&File.ReadAllText(settings)=="true";}catch(Exception){Message("无法读取常驻设置，默认关闭。");}
   AppWindow.Closing+=(_,args)=>{if(!exiting&&(busy||Resident.IsOn)){args.Cancel=true;if(!busy)AppWindow.Hide();else Message("正在操作，请等待完成后关闭。");}};
@@ -25,10 +25,10 @@ public sealed partial class MainWindow : Window
  }
  private void Refresh()
  {
-  try{var m=MemoryService.Read();MemoryText.Text=$"已用 {m.Load}%  ·  可用 {MemoryService.Size(m.Available)} / {MemoryService.Size(m.Total)}";MemoryBar.Value=m.Load;mini?.Update($"内存 {m.Load}% · 可用 {MemoryService.Size(m.Available)}");}
+  try{var m=MemoryService.Read();MemoryPercent.Text=$"{m.Load}%";AvailableText.Text=MemoryService.Size(m.Available);MemoryText.Text=$"总内存 {MemoryService.Size(m.Total)} · 每 5 秒更新";MemoryBar.Value=m.Load;mini?.Update(m.Load,MemoryService.Size(m.Available));}
   catch(Exception e){Message(e.Message,true);}
  }
- private void Message(string text,bool error=false){Status.Message=text;Status.Severity=error?InfoBarSeverity.Error:InfoBarSeverity.Informational;}
+ private void Message(string text,bool error=false){mini?.Report(text,error);Status.Message=text;Status.Severity=error?InfoBarSeverity.Error:InfoBarSeverity.Informational;}
  private async Task Run(Func<Task> work)
  {
   if(busy){Message("已有操作正在执行。");return;}busy=true;
@@ -36,11 +36,44 @@ public sealed partial class MainWindow : Window
  }
  private async Task<bool> Confirm(string title,string text)
  {
-  ShowMain();var dialog=new ContentDialog {Title=title,Content=new TextBlock {Text=text,TextWrapping=TextWrapping.Wrap},PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=Content.XamlRoot};
+  var owner=miniMode&&mini!=null?mini.Content:Content;var dialog=new ContentDialog {Title=title,Content=new TextBlock {Text=text,TextWrapping=TextWrapping.Wrap},PrimaryButtonText="确认执行",CloseButtonText="取消",DefaultButton=ContentDialogButton.Close,XamlRoot=owner.XamlRoot};
   return await dialog.ShowAsync()==ContentDialogResult.Primary;
  }
- private void ShowMain(){AppWindow.Show();Activate();}
- private void ShowMini(){if(mini==null){mini=new MiniWindow(ShowMain,()=>Memory_Click(this,new RoutedEventArgs()));mini.Closed+=(_,_)=>mini=null;}mini.Activate();Refresh();}
+ private void Navigation_SelectionChanged(NavigationView sender,NavigationViewSelectionChangedEventArgs args)
+ {
+  if(MemoryPage==null||args.SelectedItem is not NavigationViewItem item)return;
+  var tag=item.Tag as string;
+  MemoryPage.Visibility=tag=="memory"?Visibility.Visible:Visibility.Collapsed;
+  DiskPage.Visibility=tag=="disk"?Visibility.Visible:Visibility.Collapsed;
+  RegistryPage.Visibility=tag=="registry"?Visibility.Visible:Visibility.Collapsed;
+  SettingsPage.Visibility=tag=="settings"?Visibility.Visible:Visibility.Collapsed;
+  sender.Header=item.Content;
+ }
+ private void ShowMain()
+ {
+  if(busy&&miniMode)return;
+  mini?.AppWindow.Hide();miniMode=false;
+  AppWindow.Show();
+  if(AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)presenter.Restore();
+  Activate();
+ }
+ private void ShowMini()
+ {
+  if(busy){Message("请等待当前操作完成后再切换窗口。");return;}
+  if(mini==null)
+  {
+   mini=new MiniWindow(ShowMain,()=>Memory_Click(this,new RoutedEventArgs()));
+   mini.AppWindow.Closing+=(_,args)=>
+   {
+    if(exiting)return;
+    args.Cancel=true;
+    if(busy)return;
+    if(Resident.IsOn){mini?.AppWindow.Hide();miniMode=false;}
+    else ShowMain();
+   };
+  }
+  miniMode=true;Refresh();AppWindow.Hide();mini.AppWindow.Show();mini.Activate();
+ }
  private void Mini_Click(object sender,RoutedEventArgs e)=>ShowMini();
  private async void Memory_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
  {

@@ -5,7 +5,7 @@ on:
   pull_request:
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: windows-2025
@@ -21,19 +21,9 @@ jobs:
       - name: Publish portable application
         shell: pwsh
         run: ./build.ps1 -Portable
-      - name: Smoke test GUI startup
-        shell: pwsh
-        run: |
-          $app = Start-Process -FilePath (Resolve-Path 'publish/portable/ClearNest.exe') -PassThru
-          try {
-            Start-Sleep -Seconds 12
-            $app.Refresh()
-            if ($app.HasExited) { throw "Application exited during startup, code $($app.ExitCode)" }
-            if ($app.MainWindowHandle -eq 0) { throw 'Main window did not appear' }
-            Write-Output "GUI startup passed: $($app.MainWindowTitle)"
-          } finally {
-            if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }
-          }
+      - name: Verify native main and Mini window switching
+        shell: powershell
+        run: ./verification/window-modes.ps1
       - name: Verify executable and record checksums
         shell: pwsh
         run: |
@@ -49,3 +39,16 @@ jobs:
             publish/portable/
             publish/SHA256.txt
           if-no-files-found: error
+      - name: Publish v0.1.1
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          Compress-Archive -Path publish/portable,publish/SHA256.txt -DestinationPath ClearNest-Win11-x64-v0.1.1.zip
+          if (!(Test-Path ClearNest-Win11-x64-v0.1.1.zip)) { throw 'Package missing' }
+          gh release view v0.1.1 2>$null
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          gh release create v0.1.1 ClearNest-Win11-x64-v0.1.1.zip --target $env:GITHUB_SHA --title 'ClearNest v0.1.1 - Native WinUI and Mini mode' --notes 'Native WinUI 3 navigation and system-themed cards. Main and Mini windows are mutually exclusive. Memory confirmation stays inside the active window. Verified cleanup safeguards and repeated native window switching on Windows.'
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
