@@ -48,6 +48,23 @@ try {
  $mainHandle = [IntPtr]$main.Current.NativeWindowHandle
  Start-Sleep -Seconds 2
  Capture-Window $mainHandle 'main'
+ $navCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenSettings')
+ $settings=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$navCondition)
+ $settings.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Seconds 1
+ $darkCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ThemeDark')
+ $dark=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$darkCondition)
+ $dark.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Seconds 1
+ $preferences=Get-Content "$env:LOCALAPPDATA/ClearNest/preferences.json" -Raw | ConvertFrom-Json
+ if ($preferences.Theme -ne 'Dark') {throw 'Dark theme was not persisted'}
+ Write-Output 'PASS: dark theme selected and persisted through native UI'
+ Capture-Window $mainHandle 'settings-dark'
+ $homeCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'OpenHome')
+ $home=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$homeCondition)
+ $home.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+ Start-Sleep -Seconds 1
+ Capture-Window $mainHandle 'dashboard-dark' 
  for ($cycle=0; $cycle -lt 3; $cycle++) {
   Invoke-Button $main 'SwitchToMini'
   $mini = Find-Window $app.Id 'ClearNest Mini'

@@ -66,3 +66,17 @@ finally
     if(backup!=null)File.Delete(backup);
 }
 Console.WriteLine("All cleanup checks passed. Only test fixtures were modified.");
+
+var previousPreferences=File.Exists(Preferences.FilePath)?File.ReadAllBytes(Preferences.FilePath):null;
+try
+{
+ var preferences=new Preferences {Theme="Dark",Accent="Teal",Mica=false,Resident=true,MiniOnTop=false,StartInMini=true,RefreshSeconds=10};
+ preferences.Save();var loaded=Preferences.Load();
+ Check(loaded.Theme=="Dark"&&loaded.Accent=="Teal"&&!loaded.Mica&&loaded.Resident&&!loaded.MiniOnTop&&loaded.StartInMini&&loaded.RefreshSeconds==10,"appearance and behavior settings persist");
+ preferences.Theme="invalid";preferences.Accent="invalid";preferences.RefreshSeconds=-1;preferences.Save();loaded=Preferences.Load();
+ Check(loaded.Theme=="System"&&loaded.Accent=="Indigo"&&loaded.RefreshSeconds==5,"invalid setting values fall back to supported defaults");
+}
+finally
+{
+ if(previousPreferences==null)File.Delete(Preferences.FilePath);else File.WriteAllBytes(Preferences.FilePath,previousPreferences);
+}
