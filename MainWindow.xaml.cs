@@ -219,7 +219,7 @@ public sealed partial class MainWindow : Window
   if(busy&&dialogOpen&&miniMode)return;
   mini?.AppWindow.Hide();miniMode=false;
   AppWindow.Show();
-  if(AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)presenter.Restore();
+  if(AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter&&presenter.State==Microsoft.UI.Windowing.OverlappedPresenterState.Minimized)presenter.Restore();
   Activate();
  }
  private void ShowMini()
