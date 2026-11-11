@@ -2,7 +2,7 @@
 
 已通过 GitHub Actions Windows 编译、GUI 主窗口启动检查和 10 项核心清理保护测试。这是首版便携工具，尚未完成 Windows 11 全功能人工验收；内存回收 Native API 和托盘/迷你窗口交互仍需用户实机验证。
 
-[下载已编译运行包](https://github.com/DeepSeaPolo/ClearNest/actions/runs/42979455758)（Artifacts 中的 ClearNest-win11-x64）。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
+[直接下载 Windows 运行包](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.1.0/ClearNest-Win11-x64.zip) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.1.0)。完整解压后运行 `portable/ClearNest.exe`，请保留全部依赖文件。包体较大是因为包含 .NET 和 WinUI 运行时。
 
 ## 构建与运行
 
