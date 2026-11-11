@@ -2,11 +2,21 @@
 
 已通过 Windows 编译、单 EXE 独立启动、清理保护、启动项恢复、主题和后台采样期间窗口切换测试。完整 Windows 11 人工验收仍待完成；待机缓存回收使用非公开系统接口。
 
-[下载 v0.4.1 单文件 EXE](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.4.1/ClearNest-v0.4.1-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.4.1)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
+[下载 v0.5.0 单文件 EXE](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.5.0/ClearNest-v0.5.0-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.5.0)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
 
-## v0.4.1 启动修复
+## v0.5.0 单实例、网络工具与启动修复
 
-v0.4.0 发布前只验证了原名 `ClearNest.exe`，发布时改名后可能触发 WinUI 资源查找问题，表现为双击后无窗口、进程立即退出。旧包可先恢复原名 `ClearNest.exe`；v0.4.1 使用固定 `resources.pri` 修复资源查找。回归测试覆盖原名、最终发布名及浏览器重复下载的 ` (1)` 文件名，并使用独立目录和全新解包缓存。
+- 每个用户会话只创建一个实例；再次启动唤回已有主窗口。已有 Mini 或隐藏至托盘时也可唤回，不会再次初始化托盘、计时器或后台任务。跨权限启动受 Windows 对象访问策略限制，建议保持相同权限。
+- 新增网络工具页和首页入口。手动刷新网卡地址、网关、DNS、链路速率与连接累计流量；不把链路速率冒充测速。
+- 连接诊断逐步检查系统 DNS、直连 TCP 443、HTTPS 响应，每步最多 5 秒，支持取消。HTTPS 保留系统代理与证书校验，仅请求响应头，不下载测速文件，不跟随重定向。失败只说明该步骤或目标不可用，不直接判定全网断网。
+- 清空 DNS 使用 Windows DNS API。Winsock 与 TCP/IP 重置通过固定参数调用系统 netsh，不接受任意命令。每次单独确认，需要管理员权限；可能影响静态 IP、DNS、VPN 与代理，通常需要手动重启，不自动重启电脑。
+- 重置前保存本机网卡信息和操作输出到 `%LOCALAPPDATA%\\ClearNest\\Logs`。备份记录供排查，不提供自动回滚。已启动的系统命令最多等待 45 秒，取消只阻止尚未开始的步骤；超时或系统失败可能已部分生效。
+- 网络检查按用户操作执行，后台常驻不会自动访问诊断目标或重置网络。复制报告由用户触发，报告可能包含私人网络地址。
+- 实现独立编写；参考 PrismCore 的功能类别，没有搬用其实现。CI 使用本机回环监听器测试连接，不执行 DNS 清空或网络重置。
+
+### 单文件启动修复
+
+v0.4.0 发布前只验证了原名 `ClearNest.exe`，发布时改名后可能触发 WinUI 资源查找问题，表现为双击后无窗口、进程立即退出。旧包可先恢复原名 `ClearNest.exe`；v0.5.0 使用固定 `resources.pri` 修复资源查找。回归测试覆盖原名、最终发布名及浏览器重复下载的 ` (1)` 文件名，并使用独立目录和全新解包缓存。
 
 若托管启动阶段仍失败，程序显示错误并尽力写入 `%LOCALAPPDATA%\ClearNest\Logs\startup.log`。原生加载器或 .NET 主机在托管代码前退出时，无法保证生成此日志。
 
