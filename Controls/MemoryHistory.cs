@@ -32,8 +32,9 @@ public sealed class MemoryHistory : Canvas
   Clip=new RectangleGeometry {Rect=new Rect(0,0,Math.Max(0,width),Math.Max(0,ActualHeight))};
   hint.Visibility=samples==null||samples.Count<2?Visibility.Visible:Visibility.Collapsed;
   if(samples==null||samples.Count<2||width<2||height<2){area.Data=null;line.Data=null;return;}
-  var now=samples[^1].Time;var start=now-MemoryTimeline.Window;
-  var points=samples.Select(x=>new Point(Math.Clamp((x.Time-start).TotalSeconds/MemoryTimeline.Window.TotalSeconds,0,1)*width,1+MemoryTimeline.PlotY(x.Percent,height))).ToArray();
+  var now=samples[^1].Time;var start=samples[0].Time;
+  double duration=Math.Max(0.001,(now-start).TotalSeconds);
+  var points=samples.Select(x=>new Point(Math.Clamp((x.Time-start).TotalSeconds/duration,0,1)*width,1+MemoryTimeline.PlotY(x.Percent,height))).ToArray();
   PathGeometry Make(bool filled)
   {
    var figure=new PathFigure {StartPoint=filled?new Point(points[0].X,ActualHeight):points[0],IsClosed=filled};
@@ -47,6 +48,6 @@ public sealed class MemoryHistory : Canvas
    var geometry=new PathGeometry();geometry.Figures.Add(figure);return geometry;
   }
   area.Data=Make(true);line.Data=Make(false);
-  ToolTipService.SetToolTip(this,$"最近最多 5 分钟 · 当前 {samples[^1].Percent:F1}%\n纵轴固定 0–100%，不放大波动；启动前的空白没有填造数据。\n占用率 =（物理总量 − 可用物理内存）÷ 物理总量。");
+  ToolTipService.SetToolTip(this,$"已记录 {duration:F0} 秒（最多 5 分钟）· 当前 {samples[^1].Percent:F1}%\n纵轴固定 0–100%，不放大波动；横轴只覆盖实际采样时间，没有填造历史数据。\n占用率 =（物理总量 − 可用物理内存）÷ 物理总量。");
  }
 }
