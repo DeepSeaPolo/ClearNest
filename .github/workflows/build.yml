@@ -1,0 +1,51 @@
+name: Windows build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Verify cleanup guards using disposable fixtures
+        shell: pwsh
+        run: dotnet run --project verification/Verification.csproj -c Release
+      - name: Publish portable application
+        shell: pwsh
+        run: ./build.ps1 -Portable
+      - name: Smoke test GUI startup
+        shell: pwsh
+        run: |
+          $app = Start-Process -FilePath (Resolve-Path 'publish/portable/ClearNest.exe') -PassThru
+          try {
+            Start-Sleep -Seconds 12
+            $app.Refresh()
+            if ($app.HasExited) { throw "Application exited during startup, code $($app.ExitCode)" }
+            if ($app.MainWindowHandle -eq 0) { throw 'Main window did not appear' }
+            Write-Output "GUI startup passed: $($app.MainWindowTitle)"
+          } finally {
+            if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }
+          }
+      - name: Verify executable and record checksums
+        shell: pwsh
+        run: |
+          $exe = 'publish/portable/ClearNest.exe'
+          if (!(Test-Path $exe)) { throw 'ClearNest.exe missing' }
+          $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw 'Invalid PE executable' }
+          Get-ChildItem publish/portable -Recurse -File | Get-FileHash -Algorithm SHA256 | Format-Table -AutoSize | Out-String -Width 4096 | Set-Content publish/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClearNest-win11-x64
+          path: |
+            publish/portable/
+            publish/SHA256.txt
+          if-no-files-found: error
