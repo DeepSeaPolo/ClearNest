@@ -7,6 +7,8 @@ namespace ClearNest.Controls;
 public sealed class ActionWrapPanel : Panel
 {
  public static readonly DependencyProperty SpacingProperty=DependencyProperty.Register(nameof(Spacing),typeof(double),typeof(ActionWrapPanel),new PropertyMetadata(8d,(d,_)=>((ActionWrapPanel)d).InvalidateMeasure()));
+ public static readonly DependencyProperty RowSpacingProperty=DependencyProperty.Register(nameof(RowSpacing),typeof(double),typeof(ActionWrapPanel),new PropertyMetadata(8d,(d,_)=>((ActionWrapPanel)d).InvalidateMeasure()));
+ public double RowSpacing {get=>(double)GetValue(RowSpacingProperty);set=>SetValue(RowSpacingProperty,value);}
  public double Spacing {get=>(double)GetValue(SpacingProperty);set=>SetValue(SpacingProperty,value);}
  protected override Size MeasureOverride(Size available)
  {
@@ -16,7 +18,7 @@ public sealed class ActionWrapPanel : Panel
   {
    child.Measure(new Size(limit,double.PositiveInfinity));
    var size=child.DesiredSize;
-   if(x>0&&x+size.Width>limit){y+=row+Spacing;x=0;row=0;}
+   if(x>0&&x+size.Width>limit){y+=row+RowSpacing;x=0;row=0;}
    width=Math.Max(width,x+size.Width);row=Math.Max(row,size.Height);x+=size.Width+Spacing;
   }
   return new Size(width,y+row);
@@ -27,7 +29,7 @@ public sealed class ActionWrapPanel : Panel
   foreach(var child in Children)
   {
    var size=child.DesiredSize;
-   if(x>0&&x+size.Width>final.Width){y+=row+Spacing;x=0;row=0;}
+   if(x>0&&x+size.Width>final.Width){y+=row+RowSpacing;x=0;row=0;}
    child.Arrange(new Rect(x,y,Math.Min(size.Width,final.Width),size.Height));
    row=Math.Max(row,size.Height);x+=size.Width+Spacing;
   }
