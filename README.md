@@ -1,8 +1,8 @@
 # ClearNest · 清巢（WinUI 3 / Windows 11 x64）
 
-已通过 GitHub Actions Windows 编译、GUI 主窗口启动检查和 10 项核心清理保护测试。这是首版便携工具，尚未完成 Windows 11 全功能人工验收；内存回收 Native API 和托盘/迷你窗口交互仍需用户实机验证。
+已通过 Windows 编译、单 EXE 独立启动、清理保护、启动项恢复、主题和后台采样期间窗口切换测试。完整 Windows 11 人工验收仍待完成；待机缓存回收使用非公开系统接口。
 
-本开发分支的试用运行包见当前对话附件。GitHub 正式发布需另行确认，当前开发版尚未发布。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
+[下载 v0.4.0 单文件 EXE](https://github.com/DeepSeaPolo/ClearNest/releases/download/v0.4.0/ClearNest-v0.4.0-win11-x64.exe) · [发布页面](https://github.com/DeepSeaPolo/ClearNest/releases/tag/v0.4.0)。单文件版本直接运行 EXE；包体包含 .NET 与 WinUI 运行时。旧版便携 ZIP 仍须完整解压。
 
 ## v0.4.0 功能与响应性
 
@@ -20,8 +20,6 @@
 未把参考项目的进程工作集清空、自动强制分页、CPU 亲和性自动变更或系统组件/驱动删除加入默认流程。这些与本工具“不动正在使用内存”及谨慎确认原则不同。本轮也未实现网络协议栈重置和 ETW 驱动诊断。
 
 ## v0.3.0 单文件、自动回收与实时趋势
-
-当前功能位于开发分支及 PR #3；尚未获得主分支合并与公开发布的确认。上方正式发布链接将在合并并通过发布检查后生效。
 
 - 官方 .NET/WinUI 自包含单文件发布：一个 EXE 包含运行时、原生依赖、界面和图标。首次启动自动在 bundle 缓存展开依赖，不要求 EXE 旁有依赖目录。设置仍保存到用户配置目录。
 - 构建使用 `./build.ps1 -SingleFile`。检查会将唯一 EXE 复制到空目录，再运行主题和主/Mini 切换测试。
@@ -56,13 +54,13 @@ Windows 11 x64；Visual Studio 2022 的 WinUI / Windows 应用开发工具、Win
 在源码目录运行 PowerShell：
 
 ```powershell
-.\build.ps1 -Portable
-.\publish\portable\ClearNest.exe
+.\build.ps1 -SingleFile
+.\publish\single\ClearNest.exe
 ```
 
-Portable 为自带 .NET 和 Windows App SDK 的完整目录，不能只复制 EXE。
+SingleFile 为自带运行时的单文件版本；也可用 `-Portable` 生成完整目录版，目录版不能只复制 EXE。
 默认 ` .\build.ps1 ` 为较小的框架依赖目录，需要预装 .NET 8 Runtime x64 和 Windows App Runtime 1.8 x64。
-WinUI 3 和 .NET 本身有运行时成本；不承诺极小安装体积。SDK 固定为 1.8.12 以便复现；该分支已结束维护，正式发布前需要迁移到受支持分支并回归测试。
+WinUI 3 和 .NET 本身有运行时成本；不承诺极小安装体积。SDK 固定为 1.8.12 以便复现；该分支已结束维护，后续维护版本需要迁移到受支持分支并回归测试。
 附带 GitHub Actions Windows 构建配置；已在 Windows Server 2025 构建并通过主窗口启动检查。测试不主动清空系统待机缓存，只操作自动生成的临时文件与测试注册表值。
 
 ## 已实现范围
@@ -76,7 +74,7 @@ WinUI 3 和 .NET 本身有运行时成本；不承诺极小安装体积。SDK �
 - 当前用户 Run 启动项检查：仅带引号的绝对 C 盘 EXE 路径且确定缺失的项。模糊、网络和无权限路径跳过。
 - 注册表先写入并刷新 JSON 备份再删除，恢复时保留现有同名键值。没有全局注册表“优化”。
 - 后台常驻开关持久化；关闭主窗口后留在托盘；双击托盘恢复；退出会销毁迷你窗口和托盘。
-- 不含自动清理或开机启动，不需要联网运行。
+- 自动待机缓存回收默认关闭，可按间隔或占用率启用；不添加开机启动，不需要联网运行。
 
 ## 内存边界
 
