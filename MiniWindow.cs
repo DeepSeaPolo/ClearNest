@@ -23,9 +23,17 @@ public sealed class MiniWindow : Window
   var titleRegion=new Grid {Background=new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent)};
   var brand=new StackPanel {Orientation=Orientation.Horizontal,Spacing=6,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
   brand.Children.Add(new Image {Width=16,Height=16,Source=AppIconService.CreateImage()});brand.Children.Add(new TextBlock {Text="清巢",FontSize=12});titleRegion.Children.Add(brand);
-  layout.Children.Add(titleRegion);Grid.SetRow(panel,1);layout.Children.Add(panel);Content=layout;
+  layout.Children.Add(titleRegion);
+  var scroll=new ScrollViewer {Content=panel,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+  scroll.ViewChanged+=(_,_)=>{double gutter=scroll.ScrollableHeight>0.5?24:0;if(panel.Margin.Right!=gutter)panel.Margin=new Thickness(0,0,gutter,0);};
+  Grid.SetRow(scroll,1);layout.Children.Add(scroll);Content=layout;
   ExtendsContentIntoTitleBar=true;SetTitleBar(titleRegion);AppIconService.ApplyTo(this);
   layout.ActualThemeChanged+=(_,_)=>UpdateCaption();
+  layout.Loaded+=(_,_)=>{
+   double scale=layout.XamlRoot.RasterizationScale;
+   var work=DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea;
+   AppWindow.Resize(new SizeInt32(Math.Min((int)Math.Ceiling(360*scale),work.Width),Math.Min((int)Math.Ceiling(350*scale),work.Height)));
+  };
   AppWindow.Resize(new SizeInt32(360,350));
   if(AppWindow.Presenter is OverlappedPresenter presenter) {presenter.IsAlwaysOnTop=true;presenter.IsResizable=false;presenter.IsMaximizable=false;}
  }
