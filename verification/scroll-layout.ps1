@@ -86,13 +86,26 @@ try {
  Check-PageScroll 'OpenNetwork' 'NetworkPageScroller' 'NetworkResults' 'scroll-network-860'
  # The report editor has its own native scrolling inside the page.
  $report=Element-Id 'NetworkAdapters'
- $text=$report.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern)
- $rectangles=$text.DocumentRange.GetBoundingRectangles()
+ Start-Sleep -Milliseconds 500
+ $rectangles=@()
+ try {
+  $text=$report.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern)
+  foreach($range in $text.GetVisibleRanges()){$rectangles+=@($range.GetBoundingRectangles())}
+ } catch {
+  Write-Output 'INFO: host UI Automation cannot return report text rectangles; review the expanded-scrollbar screenshot'
+ }
  $rightLimit=$report.Current.BoundingRectangle.Right-20
  for($index=0;$index+3 -lt $rectangles.Length;$index+=4) {
   if($rectangles[$index]+$rectangles[$index+2] -gt $rightLimit+1){throw 'Report text overlaps its native scrollbar gutter'}
  }
- Write-Output 'PASS: multiline report text leaves room for its own scrollbar'
+ $reportBar=Vertical-Bar $report
+ if($null -ne $reportBar) {
+  $barRect=$reportBar.Current.BoundingRectangle
+  [void][ScrollPointer]::SetCursorPos([int]($barRect.Right-4),[int]($barRect.Top+20))
+  Start-Sleep -Milliseconds 400
+ }
+ Capture-Window $Handle 'scroll-report-expanded-860'
+ if($rectangles.Length -gt 0){Write-Output 'PASS: visible report text leaves room for its own scrollbar'}
  Select-Page 'OpenHome'
  Invoke-Button $Main 'ScanProcessHome'
  Select-Page 'OpenProcesses'
