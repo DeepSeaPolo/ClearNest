@@ -122,5 +122,5 @@ finally
 {
  using(var key=Registry.CurrentUser.OpenSubKey(keyPath,true))key?.DeleteValue(startupName,false);
  using(var key=Registry.CurrentUser.OpenSubKey(@"Software\ClearNest\DisabledStartup",true))key?.DeleteValue(startupName,false);
- foreach(var backup in startupBackups)File.Delete(backup);
+ foreach(var startupBackupPath in startupBackups)File.Delete(startupBackupPath);
 }

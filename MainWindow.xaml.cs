@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Threading;
 using System.Collections.Generic;
+using System.Text.Json;
 using ClearNest.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -26,6 +27,9 @@ public sealed partial class MainWindow : Window
  private bool initializing=true,dialogOpen,exitAfterWork;
  private CancellationTokenSource? operationCancellation;
  private ContentDialog? activeDialog;
+ private readonly SemaphoreSlim preferencesGate=new(1,1);
+ private long preferencesRevision;
+ private Task pendingPreferences=Task.CompletedTask;
  private int operationId,diskPage;
  private List<DiskRow> diskRows=new();
  private List<ProcessRow> processRows=new();
@@ -56,7 +60,8 @@ public sealed partial class MainWindow : Window
   {
    if(exiting)return;
    if(Resident.IsOn){args.Cancel=true;AppWindow.Hide();return;}
-   if(busy){args.Cancel=true;exitAfterWork=true;operationCancellation?.Cancel();activeDialog?.Hide();Message("正在取消当前任务，完成后退出。");}
+   if(busy){args.Cancel=true;exitAfterWork=true;operationCancellation?.Cancel();activeDialog?.Hide();Message("正在取消当前任务，完成后退出。");return;}
+   if(!pendingPreferences.IsCompleted){args.Cancel=true;Exit();}
   };
   Closed+=(_,_)=>{exiting=true;timer.Stop();tray.Dispose();mini?.Close();Microsoft.UI.Xaml.Application.Current.Exit();};
   timer.Interval=TimeSpan.FromSeconds(preferences.RefreshSeconds);timer.Tick+=(_,_)=>Refresh();timer.Start();Refresh(false);
@@ -120,7 +125,19 @@ public sealed partial class MainWindow : Window
   Grid.SetRow(ProcessCard,narrow?2:medium?1:0);Grid.SetColumn(ProcessCard,medium?0:2);Grid.SetColumnSpan(ProcessCard,medium?2:1);
  }
  public void ApplyStartupMode(){if(preferences.StartInMini)ShowMini();}
- private void PersistPreferences(){try{preferences.Save();}catch(Exception ex){Message("设置未能保存："+ex.Message,true);}}
+ private void PersistPreferences()
+ {
+  // Snapshot on the UI thread; serialize disk writes on workers and discard obsolete queued saves.
+  var snapshot=JsonSerializer.Deserialize<Preferences>(JsonSerializer.Serialize(preferences))!;
+  long revision=++preferencesRevision;pendingPreferences=SavePreferencesAsync(snapshot,revision);
+ }
+ private async Task SavePreferencesAsync(Preferences snapshot,long revision)
+ {
+  await preferencesGate.WaitAsync();
+  try{if(revision==preferencesRevision)await Task.Run(snapshot.Save);}
+  catch(Exception ex){Message("设置未能保存："+ex.Message,true);}
+  finally{preferencesGate.Release();}
+ }
  private ElementTheme PreferredTheme => preferences.Theme switch {"Dark"=>ElementTheme.Dark,"Light"=>ElementTheme.Light,_=>ElementTheme.Default};
  private static readonly string[] AccentResourceKeys={"AccentFillColorDefaultBrush","AccentFillColorSecondaryBrush","AccentFillColorTertiaryBrush","ToggleSwitchFillOn","ToggleSwitchFillOnPointerOver","ToggleSwitchFillOnPressed","RadioButtonOuterEllipseFillChecked","RadioButtonOuterEllipseFillCheckedPointerOver","RadioButtonOuterEllipseFillCheckedPressed","NavigationViewSelectionIndicatorForeground"};
  private void ApplyAppearance()
@@ -252,7 +269,7 @@ public sealed partial class MainWindow : Window
  private void ProcessLocation_Click(object sender,RoutedEventArgs e)
  {
   if(Processes.SelectedItem is not ProcessRow row||!File.Exists(row.Path)){Message("请选择路径可访问的进程。");return;}
-  try{Process.Start(new ProcessStartInfo("explorer.exe",$"/select,\"{row.Path}\""){UseShellExecute=true});}catch(Exception ex){Message(ex.Message,true);}
+  try{Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"explorer.exe"),$"/select,\"{row.Path}\""){UseShellExecute=true});}catch(Exception ex){Message(ex.Message,true);}
  }
  private void TaskManager_Click(object sender,RoutedEventArgs e)=>OpenSystem("taskmgr.exe");
  private async void DiskScan_Click(object sender,RoutedEventArgs e)=>await Run(async()=>
@@ -322,5 +339,9 @@ public sealed partial class MainWindow : Window
   Resident.IsOn=DashboardResident.IsOn=preferences.Resident;initializing=false;PersistPreferences();
  }
  private void Exit_Click(object sender,RoutedEventArgs e)=>Exit();
- private void Exit(){if(busy){exitAfterWork=true;operationCancellation?.Cancel();activeDialog?.Hide();Message("正在取消当前任务，完成后退出。");return;}exiting=true;Close();}
+ private async void Exit()
+ {
+  if(busy){exitAfterWork=true;operationCancellation?.Cancel();activeDialog?.Hide();Message("正在取消当前任务，完成后退出。");return;}
+  if(exiting)return;exiting=true;await pendingPreferences;Close();
+ }
 }
