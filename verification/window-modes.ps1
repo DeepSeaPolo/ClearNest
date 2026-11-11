@@ -161,6 +161,8 @@ try {
  $homeElement.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
  Start-Sleep -Milliseconds 500
 
+ if($Executable -like '*isolated*'){& ./verification/scroll-layout.ps1 -Main $main -Handle $mainHandle}
+
  # Verify a worker scan does not lock window-mode navigation.
  $scanCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'ScanProcessHome')
  $scanButton=$main.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$scanCondition)
