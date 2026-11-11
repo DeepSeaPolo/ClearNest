@@ -1,13 +1,27 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class WindowProbe {
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
+ public struct Rect { public int Left,Top,Right,Bottom; }
+ [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd,out Rect rect);
 }
 '@
+function Capture-Window($handle, $name) {
+ $bounds = New-Object WindowProbe+Rect
+ [void][WindowProbe]::GetWindowRect($handle,[ref]$bounds)
+ $bitmap = New-Object System.Drawing.Bitmap(($bounds.Right-$bounds.Left),($bounds.Bottom-$bounds.Top))
+ $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+ try {
+  $graphics.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$bitmap.Size)
+  [void](New-Item -ItemType Directory -Force publish/ui-checks)
+  $bitmap.Save((Join-Path (Get-Location) "publish/ui-checks/$name.png"),[System.Drawing.Imaging.ImageFormat]::Png)
+ } finally {$graphics.Dispose();$bitmap.Dispose()}
+}
 function Find-Window($processId, $title) {
  $condition = New-Object System.Windows.Automation.AndCondition(
    (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$processId)),
@@ -30,8 +44,10 @@ function Invoke-Button($root, $automationId) {
 }
 $app = Start-Process -FilePath (Resolve-Path 'publish/portable/ClearNest.exe') -PassThru
 try {
- $main = Find-Window $app.Id 'ClearNest · 清巢'
+ $main = Find-Window $app.Id ('ClearNest '+[char]0xB7+' '+[char]0x6E05+[char]0x5DE2)
  $mainHandle = [IntPtr]$main.Current.NativeWindowHandle
+ Start-Sleep -Seconds 2
+ Capture-Window $mainHandle 'main'
  for ($cycle=0; $cycle -lt 3; $cycle++) {
   Invoke-Button $main 'SwitchToMini'
   $mini = Find-Window $app.Id 'ClearNest Mini'
@@ -39,6 +55,7 @@ try {
   if ([WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window remains visible in Mini mode'}
   if (![WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini window is hidden in Mini mode'}
   Write-Output "PASS: Mini mode hides main window (cycle $cycle)"
+  if ($cycle -eq 0) {Capture-Window $miniHandle 'mini'}
   Invoke-Button $mini 'ReturnToMain'
   if (![WindowProbe]::IsWindowVisible($mainHandle)) {throw 'Main window did not return'}
   if ([WindowProbe]::IsWindowVisible($miniHandle)) {throw 'Mini remains visible after returning to main'}
