@@ -1,0 +1,43 @@
+name: Publish verified release
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Retrieve verified Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/actions/artifacts/13836837119/zip" > ClearNest-Win11-x64.zip
+          echo '59db4efd69636ca099f118558209ea227e2ffbe1024ae7681487558e32070d53  ClearNest-Win11-x64.zip' | sha256sum -c -
+          unzip -tq ClearNest-Win11-x64.zip
+          sha256sum ClearNest-Win11-x64.zip > SHA256SUMS.txt
+      - name: Publish download
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          Windows 11 x64 portable application. Extract the entire ZIP and run portable/ClearNest.exe. Keep all dependencies together.
+
+          Verified Windows build, GUI startup, and 10 cleanup safeguard checks:
+          https://github.com/DeepSeaPolo/ClearNest/actions/runs/42979455758
+
+          Source: c000ad7d016b4c6f2f2514b3b4d5dffd590e8464. Subsequent changes add documentation and distribution only.
+          Memory standby reclamation requires administrator privileges and uses an undocumented native API. Full Windows 11 manual validation remains pending.
+          NOTES
+          if gh release view v0.1.0 >/dev/null 2>&1; then
+            echo 'Release already exists; leaving existing assets unchanged.'
+            exit 0
+          fi
+          gh release create v0.1.0 ClearNest-Win11-x64.zip SHA256SUMS.txt --target "$GITHUB_SHA" --title 'ClearNest v0.1.0 - Windows 11 x64' --notes-file release-notes.md
