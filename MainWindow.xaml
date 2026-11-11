@@ -12,7 +12,7 @@
     <NavigationViewItem Content="仪表盘" Tag="home" AutomationProperties.AutomationId="OpenHome"><NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem Content="进程列表" Tag="process"><NavigationViewItem.Icon><FontIcon Glyph="&#xE9D9;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem Content="临时文件" Tag="disk"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8B7;"/></NavigationViewItem.Icon></NavigationViewItem>
-    <NavigationViewItem Content="启动项检查" Tag="registry"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;"/></NavigationViewItem.Icon></NavigationViewItem>
+    <NavigationViewItem Content="启动项检查" Tag="registry"><NavigationViewItem.Icon><FontIcon Glyph="&#xEC4A;" FontFamily="Segoe Fluent Icons"/></NavigationViewItem.Icon></NavigationViewItem>
    </NavigationView.MenuItems>
    <NavigationView.FooterMenuItems><NavigationViewItem Content="设置" Tag="settings" AutomationProperties.AutomationId="OpenSettings"><NavigationViewItem.Icon><FontIcon Glyph="&#xE115;"/></NavigationViewItem.Icon></NavigationViewItem></NavigationView.FooterMenuItems>
    <Grid Margin="24,4,24,20" RowSpacing="12"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
